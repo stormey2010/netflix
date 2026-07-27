@@ -31,7 +31,9 @@ class Settings:
     dashboard_password: str
     users: tuple[str, str] = ("Parker", "Emily")
     host: str = "0.0.0.0"
-    port: int = 8765
+    # 8765 is permanently blocked on this machine by an http.sys reservation
+    # held by a SYSTEM process, so the server runs on 8766.
+    port: int = 8766
     cloudflared_path: str = r"C:\cloudflared\cloudflared.exe"
     tunnel_name: str = "netflixapi"
     # Ingress config (hostname -> localhost mapping) lives at the repo root.
