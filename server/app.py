@@ -39,14 +39,14 @@ from routes import (
 ALLOWED_ORIGINS = [
     "https://www.netflix.com",
     "https://netflix.com",
-    "https://api.stormeydev.com",
+    "https://netflix-api.faredrop.xyz",
     "http://localhost:8765",
 ]
 ALLOWED_ORIGIN_REGEX = (
     r"(https://([a-z0-9-]+\.)?netflix\.com)"
     r"|(chrome-extension://.+)"
     r"|(http://localhost:8765)"
-    r"|(https://api\.stormeydev\.com)"
+    r"|(https://netflix-api\.faredrop\.xyz)"
 )
 
 # ---------------------------------------------------------------------------
@@ -62,8 +62,12 @@ async def lifespan(app: FastAPI):
     bin_path = Path(settings.cloudflared_path)
     if not (_cloudflared_proc and _cloudflared_proc.poll() is None):
         try:
+            cmd = [str(bin_path), "tunnel"]
+            if settings.tunnel_config_path.exists():
+                cmd += ["--config", str(settings.tunnel_config_path)]
+            cmd += ["run", settings.tunnel_name]
             _cloudflared_proc = subprocess.Popen(
-                [str(bin_path), "tunnel", "run", settings.tunnel_name],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),

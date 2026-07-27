@@ -3,7 +3,7 @@
  * Shared constants used by the content scripts, popup, and setup page.
  */
 
-const NC_API_BASE = 'https://api.stormeydev.com';
+const NC_API_BASE = 'https://netflix-api.faredrop.xyz';
 const NC_API_KEY = '30b742d6-19c5-429d-a13d-f9a24e1464e6';
 
 const NC_CONFIG = {

@@ -34,6 +34,8 @@ class Settings:
     port: int = 8765
     cloudflared_path: str = r"C:\cloudflared\cloudflared.exe"
     tunnel_name: str = "netflixapi"
+    # Ingress config (hostname -> localhost mapping) lives at the repo root.
+    tunnel_config_path: Path = SERVER_DIR.parent / "config.yml"
     db_path: Path = SERVER_DIR / "netflix_connect.db"
     dashboard_session_hours: int = 8
 

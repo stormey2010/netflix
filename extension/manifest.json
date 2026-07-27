@@ -17,7 +17,7 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage", "tabs", "activeTab"],
-  "host_permissions": ["https://www.netflix.com/*", "https://api.stormeydev.com/*"],
+  "host_permissions": ["https://www.netflix.com/*", "https://netflix-api.faredrop.xyz/*"],
   "web_accessible_resources": [
     {
       "resources": ["page-bridge.js", "page-ui.js", "setup.html"],
@@ -25,7 +25,7 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.stormeydev.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://netflix-api.faredrop.xyz"
   },
   "content_scripts": [
     {
