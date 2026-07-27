@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Netflix Connect &middot; Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --card: #15151b;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f2f2f4;
+      --muted: #8b8b95;
+      --red: #e50914;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 0%, rgba(229, 9, 20, 0.12), transparent),
+        radial-gradient(ellipse 50% 40% at 90% 100%, rgba(229, 9, 20, 0.08), transparent);
+      pointer-events: none;
+    }
+    .card {
+      position: relative;
+      width: 100%;
+      max-width: 400px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    }
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 40px;
+      letter-spacing: 3px;
+      color: var(--red);
+      line-height: 1;
+      text-align: center;
+    }
+    .logo-sub {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 6px 0 36px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    input[type="password"] {
+      width: 100%;
+      height: 48px;
+      padding: 0 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input[type="password"]:focus {
+      border-color: rgba(229, 9, 20, 0.6);
+      box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.15);
+    }
+    button {
+      width: 100%;
+      height: 48px;
+      margin-top: 20px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+    button:hover { filter: brightness(1.12); }
+    button:active { transform: scale(0.985); }
+    .error {
+      margin-bottom: 20px;
+      padding: 12px 14px;
+      background: rgba(229, 9, 20, 0.1);
+      border: 1px solid rgba(229, 9, 20, 0.35);
+      border-radius: 10px;
+      color: #ff7a81;
+      font-size: 13px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">NETFLIX</div>
+    <div class="logo-sub">Connect &middot; Dashboard</div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/dashboard">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" autofocus required />
+      <button type="submit">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>

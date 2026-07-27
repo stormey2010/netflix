@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Netflix Connect &middot; Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --card: #14141a;
+      --card-2: #1a1a22;
+      --border: rgba(255, 255, 255, 0.07);
+      --text: #f2f2f4;
+      --muted: #8b8b95;
+      --faint: #55555f;
+      --red: #e50914;
+      --green: #2dd573;
+      --amber: #f5b342;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 70% 35% at 50% 0%, rgba(229, 9, 20, 0.07), transparent);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap { position: relative; max-width: 1100px; margin: 0 auto; padding: 24px 24px 64px; z-index: 1; }
+
+    /* ── Topbar ─────────────────────────────── */
+    .topbar { display: flex; align-items: center; gap: 16px; padding: 6px 0 24px; }
+    .brand { display: flex; align-items: baseline; gap: 10px; }
+    .brand-n { font-family: 'Bebas Neue', sans-serif; font-size: 30px; letter-spacing: 2px; color: var(--red); line-height: 1; }
+    .brand-sub { font-size: 11px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: var(--muted); }
+    .topbar-spacer { flex: 1; }
+    .conn-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 14px; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--border);
+      font-size: 12px; font-weight: 600; color: var(--muted);
+    }
+    .conn-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+    .conn-pill.on { color: var(--green); border-color: rgba(45, 213, 115, 0.3); }
+    .conn-pill.on .dot { background: var(--green); box-shadow: 0 0 8px rgba(45, 213, 115, 0.7); animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.5; } }
+    .logout { color: var(--faint); font-size: 12px; font-weight: 600; text-decoration: none; padding: 8px 4px; }
+    .logout:hover { color: var(--text); }
+
+    /* ── Cards / layout ─────────────────────── */
+    .grid-users { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .grid-users { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+    }
+    .section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--faint); margin: 28px 0 12px;
+    }
+
+    /* ── User card ──────────────────────────── */
+    .user-head { display: flex; align-items: center; gap: 12px; }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; color: #fff;
+      background: linear-gradient(135deg, #e50914, #8f0610);
+    }
+    .avatar.alt { background: linear-gradient(135deg, #6d5df6, #3d2f9e); }
+    .user-name { font-size: 16px; font-weight: 700; }
+    .user-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .state-badge {
+      margin-left: auto; padding: 5px 11px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+      background: rgba(255, 255, 255, 0.05); color: var(--faint);
+    }
+    .state-badge.playing { background: rgba(45, 213, 115, 0.12); color: var(--green); }
+    .state-badge.paused { background: rgba(245, 179, 66, 0.12); color: var(--amber); }
+
+    .now-playing { margin-top: 16px; }
+    .np-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .np-title a { color: inherit; text-decoration: none; }
+    .np-title a:hover { color: var(--red); }
+    .progress-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .time { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 44px; }
+    .time.right { text-align: right; }
+    .bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+    .bar-fill { height: 100%; width: 0%; border-radius: 3px; background: var(--red); transition: width 0.4s linear; }
+
+    .meta-row { display: flex; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+    .meta { font-size: 11px; color: var(--faint); }
+    .meta b { color: var(--muted); font-weight: 600; }
+
+    .user-actions { display: flex; gap: 8px; margin-top: 16px; }
+
+    /* ── Buttons ────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      height: 36px; padding: 0 16px;
+      border: 1px solid var(--border); border-radius: 9px;
+      background: var(--card-2); color: var(--text);
+      font-family: inherit; font-size: 12.5px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+    .btn:hover { background: #23232c; border-color: rgba(255, 255, 255, 0.14); }
+    .btn:active { transform: scale(0.97); }
+    .btn.primary { background: var(--red); border-color: transparent; }
+    .btn.primary:hover { filter: brightness(1.12); background: var(--red); }
+    .btn.sm { height: 30px; padding: 0 12px; font-size: 11.5px; }
+    .btn svg { width: 13px; height: 13px; fill: currentColor; }
+
+    /* ── Controls bar ───────────────────────── */
+    .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .controls .sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+    .seek-box { display: flex; align-items: center; gap: 8px; }
+    .seek-box input {
+      width: 90px; height: 36px; padding: 0 12px;
+      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+      border-radius: 9px; color: var(--text); font-family: inherit; font-size: 13px;
+      outline: none;
+    }
+    .seek-box input:focus { border-color: rgba(229, 9, 20, 0.5); }
+
+    /* ── Two-column lower area ──────────────── */
+    .grid-lower { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 800px) { .grid-lower { grid-template-columns: 1fr; } }
+
+    /* ── Activity feed ──────────────────────── */
+    .feed { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+    .feed::-webkit-scrollbar { width: 5px; }
+    .feed::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 3px; }
+    .feed-item {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 7px 10px; border-radius: 8px; font-size: 12.5px;
+    }
+    .feed-item:nth-child(odd) { background: rgba(255, 255, 255, 0.02); }
+    .feed-time { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .feed-text { color: var(--muted); }
+    .feed-text b { color: var(--text); font-weight: 600; }
+    .feed-empty { color: var(--faint); font-size: 12.5px; padding: 16px 10px; }
+
+    /* ── Watchlist ──────────────────────────── */
+    .wl { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+    .wl::-webkit-scrollbar { width: 5px; }
+    .wl::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 3px; }
+    .wl-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 10px; transition: background 0.15s; }
+    .wl-item:hover { background: rgba(255, 255, 255, 0.04); }
+    .wl-thumb { width: 64px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--card-2); flex-shrink: 0; }
+    .wl-info { min-width: 0; }
+    .wl-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wl-meta { font-size: 11px; color: var(--faint); margin-top: 2px; }
+    .wl-empty { color: var(--faint); font-size: 12.5px; padding: 12px 4px; }
+
+    /* ── Stats strip ────────────────────────── */
+    .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    @media (max-width: 800px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; text-align: center; }
+    .stat-val { font-size: 24px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+    .stat-val span { color: var(--red); }
+    .stat-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--faint); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-n">NETFLIX</div>
+        <div class="brand-sub">Connect</div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="conn-pill" id="connPill"><span class="dot"></span><span id="connText">Not connected</span></div>
+      <a class="logout" href="/dashboard/logout">Log out</a>
+    </div>
+
+    <div class="grid-users" id="userCards"></div>
+
+    <div class="section-title">Playback Controls</div>
+    <div class="card controls">
+      <button class="btn primary" id="playAll">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>Play both
+      </button>
+      <button class="btn" id="pauseAll">
+        <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause both
+      </button>
+      <div class="sep"></div>
+      <div class="seek-box">
+        <input id="seekInput" placeholder="mm:ss" spellcheck="false" />
+        <button class="btn" id="seekAll">Seek both</button>
+      </div>
+    </div>
+
+    <div class="grid-lower" style="margin-top: 28px;">
+      <div>
+        <div class="section-title" style="margin-top: 0;">Live Activity</div>
+        <div class="card">
+          <div class="feed" id="feed"><div class="feed-empty">Waiting for activity&hellip;</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-top: 0;">Shared Watchlist</div>
+        <div class="card">
+          <div class="wl" id="watchlist"><div class="wl-empty">Loading&hellip;</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Last 30 Days</div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <script>
+    const USERS = ['Parker', 'Emily'];
+    const OFFLINE_AFTER_MS = 12000;
+    const users = {}; // name -> { telemetry, lastSeen }
+
+    // ── Helpers ─────────────────────────────────────────
+    const $ = (id) => document.getElementById(id);
+    const esc = (t) => { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; };
+
+    function fmtTime(s) {
+      if (!Number.isFinite(s) || s < 0) return '--:--';
+      s = Math.floor(s);
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
+    }
+
+    function parseSeek(text) {
+      const parts = String(text).trim().split(':').map(Number);
+      if (parts.some(isNaN)) return null;
+      if (parts.length === 1) return parts[0];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      return null;
+    }
+
+    function titleFromUrl(url) {
+      if (!url) return null;
+      if (url.includes('/watch/')) return 'Watching \u00b7 ' + url.split('/watch/')[1].split('?')[0];
+      if (url.includes('/browse')) return 'Browsing Netflix';
+      if (url.includes('/search')) return 'Searching';
+      return 'On Netflix';
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+      if (!res.ok) throw new Error(path + ' -> ' + res.status);
+      return res.json();
+    }
+
+    const sendCommand = (command, extra = {}) =>
+      api('/command', { method: 'POST', body: JSON.stringify({ command, ...extra }) }).catch(() => {});
+
+    // ── User cards ──────────────────────────────────────
+    function buildCards() {
+      $('userCards').innerHTML = USERS.map((name, i) => `
+        <div class="card" id="card-${name}">
+          <div class="user-head">
+            <div class="avatar ${i ? 'alt' : ''}">${name[0]}</div>
+            <div>
+              <div class="user-name">${name}</div>
+              <div class="user-sub" id="sub-${name}">Offline</div>
+            </div>
+            <div class="state-badge" id="badge-${name}">OFFLINE</div>
+          </div>
+          <div class="now-playing">
+            <div class="np-title" id="title-${name}">&mdash;</div>
+            <div class="progress-row">
+              <div class="time" id="cur-${name}">--:--</div>
+              <div class="bar"><div class="bar-fill" id="fill-${name}"></div></div>
+              <div class="time right" id="dur-${name}">--:--</div>
+            </div>
+            <div class="meta-row">
+              <div class="meta">Speed <b id="rate-${name}">&mdash;</b></div>
+              <div class="meta">Dropped <b id="drop-${name}">&mdash;</b></div>
+              <div class="meta">Seen <b id="seen-${name}">&mdash;</b></div>
+            </div>
+          </div>
+          <div class="user-actions">
+            <button class="btn sm" data-cmd="play" data-user="${name}">
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>Play
+            </button>
+            <button class="btn sm" data-cmd="pause" data-user="${name}">
+              <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
+            </button>
+          </div>
+        </div>`).join('');
+
+      document.querySelectorAll('[data-cmd]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          sendCommand(btn.dataset.cmd, { target_user: btn.dataset.user });
+          logEvent(`Sent <b>${btn.dataset.cmd}</b> to <b>${btn.dataset.user}</b>`);
+        });
+      });
+    }
+
+    function renderUser(name) {
+      const u = users[name];
+      const badge = $('badge-' + name);
+      if (!u || !u.telemetry || Date.now() - u.lastSeen > OFFLINE_AFTER_MS) {
+        badge.textContent = 'OFFLINE';
+        badge.className = 'state-badge';
+        $('sub-' + name).textContent = 'Offline';
+        return;
+      }
+      const t = u.telemetry;
+      const playing = !t.paused;
+      badge.textContent = playing ? 'PLAYING' : 'PAUSED';
+      badge.className = 'state-badge ' + (playing ? 'playing' : 'paused');
+      $('sub-' + name).textContent = playing ? 'Watching now' : 'Paused';
+
+      const watchId = t.watch_id || (t.url && t.url.includes('/watch/') ? t.url.split('/watch/')[1].split('?')[0] : null);
+      $('title-' + name).innerHTML = watchId
+        ? `<a href="https://www.netflix.com/watch/${esc(watchId)}" target="_blank" rel="noopener">${esc(titleFromUrl(t.url))}</a>`
+        : esc(titleFromUrl(t.url) || '\u2014');
+
+      // Estimate live position between telemetry pings.
+      let pos = t.position_s;
+      if (playing) pos += (Date.now() - u.lastSeen) / 1000 * (t.rate || 1);
+      const dur = t.duration_s;
+
+      $('cur-' + name).textContent = fmtTime(pos);
+      $('dur-' + name).textContent = fmtTime(dur);
+      $('fill-' + name).style.width = dur > 0 ? Math.min(100, (pos / dur) * 100) + '%' : '0%';
+      $('rate-' + name).textContent = (t.rate || 1) + 'x';
+      $('drop-' + name).textContent = t.dropped ?? '\u2014';
+      const ago = Math.round((Date.now() - u.lastSeen) / 1000);
+      $('seen-' + name).textContent = ago <= 3 ? 'now' : ago + 's ago';
+    }
+
+    function renderAll() { USERS.forEach(renderUser); }
+
+    // ── Connection pill ─────────────────────────────────
+    function setConnection(connection) {
+      const pill = $('connPill');
+      if (connection && connection.users) {
+        pill.classList.add('on');
+        $('connText').textContent = connection.users.join(' + ') + ' connected';
+      } else {
+        pill.classList.remove('on');
+        $('connText').textContent = 'Not connected';
+      }
+    }
+
+    // ── Activity feed ───────────────────────────────────
+    const feedItems = [];
+    function logEvent(html) {
+      const now = new Date();
+      const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      feedItems.unshift({ time, html });
+      if (feedItems.length > 80) feedItems.pop();
+      $('feed').innerHTML = feedItems
+        .map((f) => `<div class="feed-item"><span class="feed-time">${f.time}</span><span class="feed-text">${f.html}</span></div>`)
+        .join('');
+    }
+
+    function describeCommand(e) {
+      const src = e.source_user ? `<b>${esc(e.source_user)}</b>` : 'Dashboard';
+      const at = Number.isFinite(e.seconds) ? ` @ ${fmtTime(e.seconds)}` : '';
+      const map = {
+        sync_play: `${src} pressed play${at}`,
+        sync_pause: `${src} paused${at}`,
+        sync_seek: `${src} seeked${at}`,
+        sync_speed: `${src} set speed to <b>${esc(e.playback_rate)}x</b>`,
+        sync_skip: `${src} skipped ${esc(e.skip_type || '')}${at}`,
+        sync_tab_away: `${src} switched tabs`,
+        sync_tab_back: `${src} is back`,
+        partner_left: `${src} left the video`,
+        share: `${src} shared <b>${esc(e.title || 'a title')}</b>`,
+        watchlist_added: `<b>${esc(e.added_by)}</b> added <b>${esc(e.title)}</b> to the watchlist`,
+        watchlist_removed: `<b>${esc(e.removed_by)}</b> removed <b>${esc(e.title)}</b> from the watchlist`,
+        play: `Dashboard: play \u2192 <b>${esc(e.target_user || 'both')}</b>`,
+        pause: `Dashboard: pause \u2192 <b>${esc(e.target_user || 'both')}</b>`,
+        seek: `Dashboard: seek${at} \u2192 <b>${esc(e.target_user || 'both')}</b>`,
+      };
+      return map[e.command] || `${src}: ${esc(e.command)}`;
+    }
+
+    // ── Watchlist & stats ───────────────────────────────
+    async function loadWatchlist() {
+      try {
+        const data = await api('/watchlist');
+        const items = data.watchlist || [];
+        $('watchlist').innerHTML = items.length
+          ? items.map((it) => `
+              <a class="wl-item" href="https://www.netflix.com/title/${esc(it.netflix_id)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">
+                ${it.image_url ? `<img class="wl-thumb" src="${esc(it.image_url)}" alt="" onerror="this.style.visibility='hidden'" />` : '<div class="wl-thumb"></div>'}
+                <div class="wl-info">
+                  <div class="wl-title">${esc(it.title)}</div>
+                  <div class="wl-meta">Added by ${esc(it.added_by)}</div>
+                </div>
+              </a>`).join('')
+          : '<div class="wl-empty">Watchlist is empty</div>';
+      } catch { $('watchlist').innerHTML = '<div class="wl-empty">Could not load watchlist</div>'; }
+    }
+
+    async function loadStats() {
+      try {
+        const data = await api('/stats?days=30');
+        const t = data.totals || {}, a = data.all_time || {};
+        const items = [
+          [t.watch_time_hours || 0, 'Hours'],
+          [t.sessions || 0, 'Sessions'],
+          [t.titles || 0, 'Titles'],
+          [t.episodes || 0, 'Episodes'],
+          [`<span>${a.watch_time_hours || 0}h</span>`, 'All-time'],
+        ];
+        $('stats').innerHTML = items
+          .map(([v, l]) => `<div class="stat"><div class="stat-val">${v}</div><div class="stat-label">${l}</div></div>`)
+          .join('');
+      } catch { /* leave empty */ }
+    }
+
+    // ── SSE ─────────────────────────────────────────────
+    function startStream() {
+      const es = new EventSource('/events/stream?channels=telemetry,command,nav,invite');
+      es.onmessage = (ev) => {
+        let e; try { e = JSON.parse(ev.data); } catch { return; }
+        switch (e.channel) {
+          case 'init':
+            setConnection(e.connection);
+            break;
+          case 'telemetry':
+            users[e.user] = { telemetry: e, lastSeen: Date.now() };
+            renderUser(e.user);
+            if (e.action && !e.action.startsWith('key_') && !e.action.startsWith('click_')) {
+              logEvent(`<b>${esc(e.user)}</b>: ${esc(e.action)}`);
+            }
+            break;
+          case 'command':
+            logEvent(describeCommand(e));
+            if (e.command === 'watchlist_added' || e.command === 'watchlist_removed') loadWatchlist();
+            break;
+          case 'nav':
+            logEvent(`<b>${esc(e.target_user || '')}</b> is being pulled to a video (${esc(e.reason || 'nav sync')})`);
+            break;
+          case 'invite':
+            if (e.event === 'invite_received') logEvent(`<b>${esc(e.from)}</b> invited <b>${esc(e.to)}</b>`);
+            else if (e.event === 'connected') { setConnection({ users: e.users }); logEvent(`<b>${(e.users || []).join('</b> + <b>')}</b> connected`); }
+            else if (e.event === 'disconnected') { setConnection(null); logEvent('Session ended'); }
+            else if (e.event === 'rejected') logEvent(`<b>${esc(e.rejected_by)}</b> declined the invite`);
+            break;
+        }
+      };
+      es.onerror = () => { es.close(); setTimeout(startStream, 3000); };
+    }
+
+    // ── Controls ────────────────────────────────────────
+    $('playAll').addEventListener('click', () => { sendCommand('play'); logEvent('Sent <b>play</b> to both'); });
+    $('pauseAll').addEventListener('click', () => { sendCommand('pause'); logEvent('Sent <b>pause</b> to both'); });
+    $('seekAll').addEventListener('click', () => {
+      const s = parseSeek($('seekInput').value);
+      if (s === null) return;
+      sendCommand('seek', { seconds: s });
+      logEvent(`Sent <b>seek</b> to ${fmtTime(s)} for both`);
+      $('seekInput').value = '';
+    });
+    $('seekInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('seekAll').click(); });
+
+    // ── Boot ────────────────────────────────────────────
+    buildCards();
+    setInterval(renderAll, 1000);
+    startStream();
+    loadWatchlist();
+    loadStats();
+
+    api('/invite/status').then((d) => setConnection(d.connection)).catch(() => {});
+    api('/telemetry/all').then((d) => {
+      Object.entries(d.items || {}).forEach(([name, snap]) => {
+        users[name] = {
+          telemetry: {
+            ...snap,
+            watch_id: snap.url && snap.url.includes('/watch/') ? snap.url.split('/watch/')[1].split('?')[0] : null,
+          },
+          lastSeen: snap.received_at ? new Date(snap.received_at).getTime() : 0,
+        };
+      });
+      renderAll();
+    }).catch(() => {});
+  </script>
+</body>
+</html>

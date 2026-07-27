@@ -1,0 +1,10 @@
+# Secrets
+.env
+server/secrets.yml
+
+# Local database
+server/netflix_connect.db
+
+# Python
+__pycache__/
+*.pyc

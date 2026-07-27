@@ -1,0 +1,7 @@
+tunnel: e0196d18-f95b-46f8-9f68-f6fb7b21a8d4
+credentials-file: C:\Users\parke\.cloudflared\e0196d18-f95b-46f8-9f68-f6fb7b21a8d4.json
+
+ingress:
+  - hostname: api.stormeydev.com
+    service: http://localhost:8765
+  - service: http_status:404

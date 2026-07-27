@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Netflix Connect &middot; Setup</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --text: #f2f2f4;
+      --muted: #8b8b95;
+      --faint: #55555f;
+      --red: #e50914;
+      --green: #2dd573;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 55% 40% at 25% 0%, rgba(229, 9, 20, 0.13), transparent),
+        radial-gradient(ellipse 45% 40% at 85% 100%, rgba(229, 9, 20, 0.07), transparent);
+      pointer-events: none;
+    }
+
+    .stage { position: relative; text-align: center; max-width: 560px; width: 100%; }
+
+    .logo {
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: var(--red);
+      line-height: 1;
+    }
+    .logo-sub {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .tagline { color: var(--faint); font-size: 14px; margin-top: 14px; }
+
+    .question {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      margin: 52px 0 36px;
+      letter-spacing: 0.2px;
+    }
+
+    .profiles {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+    }
+    .profile {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      color: var(--muted);
+      transition: color 0.2s;
+    }
+    .profile-avatar {
+      width: 128px;
+      height: 128px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 52px;
+      font-weight: 800;
+      color: #fff;
+      border: 3px solid transparent;
+      transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1), border-color 0.2s, box-shadow 0.2s;
+    }
+    .profile:nth-child(1) .profile-avatar { background: linear-gradient(135deg, #e50914, #8f0610); }
+    .profile:nth-child(2) .profile-avatar { background: linear-gradient(135deg, #6d5df6, #3d2f9e); }
+    .profile:hover .profile-avatar,
+    .profile:focus-visible .profile-avatar {
+      transform: scale(1.06);
+      border-color: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    }
+    .profile:hover { color: #fff; }
+    .profile-name {
+      display: block;
+      margin-top: 16px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .profile.selected .profile-avatar {
+      border-color: var(--green);
+      box-shadow: 0 0 0 5px rgba(45, 213, 115, 0.18);
+    }
+    .profile.selected { color: #fff; }
+
+    .hint { color: var(--faint); font-size: 12.5px; margin-top: 44px; }
+
+    /* Success screen */
+    .success { display: none; animation: fadeIn 0.4s ease; }
+    .success.visible { display: block; }
+    .stage.done .picker { display: none; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    .success-avatar {
+      width: 108px; height: 108px;
+      margin: 48px auto 0;
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; font-weight: 800; color: #fff;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    }
+    .success-title { font-size: 26px; font-weight: 700; color: #fff; margin-top: 28px; }
+    .success-sub { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .success-btn {
+      margin-top: 32px;
+      height: 48px;
+      padding: 0 36px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+    .success-btn:hover { filter: brightness(1.12); }
+    .success-btn:active { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="logo">NETFLIX</div>
+    <div class="logo-sub">Connect</div>
+
+    <div class="picker">
+      <p class="tagline">Watch together, no matter the distance</p>
+      <div class="question">Who's watching?</div>
+      <div class="profiles" id="profiles"></div>
+      <p class="hint">You can switch profiles anytime from the extension popup</p>
+    </div>
+
+    <div class="success" id="success">
+      <div class="success-avatar" id="successAvatar"></div>
+      <div class="success-title">You're all set!</div>
+      <div class="success-sub" id="successSub">Ready to watch together</div>
+      <button class="success-btn" id="closeBtn">Start Watching</button>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>
