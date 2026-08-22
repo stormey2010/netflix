@@ -20,27 +20,34 @@ class TelemetryPayload(BaseModel):
     frames: int = Field(..., description="Total frames rendered")
     dropped: int = Field(..., description="Dropped frame count")
     action: str | None = Field(None, description="Optional action marker")
+    segment: str | None = Field(None, description="intro, recap, or null when in main content")
 
 
 class CommandPayload(BaseModel):
     """Playback command pushed to clients (dashboard controls, shares)."""
 
-    command: str = Field(..., description="play, pause, seek, or share")
+    command: str = Field(..., description="play, pause, seek, share, or align")
     seconds: float | None = Field(None, description="Seek target in seconds")
     target_user: str | None = Field(None, description="Target user, or None for all")
     url: str | None = Field(None, description="URL for share command")
     title: str | None = Field(None, description="Title for share command")
     source_user: str | None = Field(None, description="User who initiated the command")
+    soft: bool | None = Field(None, description="Prefer soft rate-nudge sync when possible")
 
 
 class SyncPayload(BaseModel):
     """Playback sync event relayed from one user to their partner."""
 
-    command: str = Field(..., description="sync_play, sync_pause, sync_seek, sync_speed, sync_skip, sync_tab_away, sync_tab_back")
+    command: str = Field(
+        ...,
+        description="sync_play, sync_pause, sync_seek, sync_speed, sync_skip, sync_segment, sync_segment_clear, sync_tab_away, sync_tab_back",
+    )
     seconds: float = Field(..., description="Playback position in seconds")
     source_user: str = Field(..., description="User who initiated the sync")
     playback_rate: float | None = Field(None, description="Rate for sync_speed")
     skip_type: str | None = Field(None, description="intro, recap, or credits")
+    segment: str | None = Field(None, description="intro or recap for sync_segment")
+    soft: bool | None = Field(None, description="Prefer soft rate-nudge when seeking")
 
 
 class InvitePayload(BaseModel):

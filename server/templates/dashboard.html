@@ -193,6 +193,10 @@
       <button class="btn" id="pauseAll">
         <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause both
       </button>
+      <button class="btn" id="syncBoth" title="Align both to the person further ahead">
+        <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+        Sync both
+      </button>
       <div class="sep"></div>
       <div class="seek-box">
         <input id="seekInput" placeholder="mm:ss" spellcheck="false" />
@@ -283,6 +287,7 @@
             <div class="meta-row">
               <div class="meta">Speed <b id="rate-${name}">&mdash;</b></div>
               <div class="meta">Dropped <b id="drop-${name}">&mdash;</b></div>
+              <div class="meta">Segment <b id="seg-${name}">&mdash;</b></div>
               <div class="meta">Seen <b id="seen-${name}">&mdash;</b></div>
             </div>
           </div>
@@ -334,6 +339,7 @@
       $('fill-' + name).style.width = dur > 0 ? Math.min(100, (pos / dur) * 100) + '%' : '0%';
       $('rate-' + name).textContent = (t.rate || 1) + 'x';
       $('drop-' + name).textContent = t.dropped ?? '\u2014';
+      $('seg-' + name).textContent = t.segment || 'main';
       const ago = Math.round((Date.now() - u.lastSeen) / 1000);
       $('seen-' + name).textContent = ago <= 3 ? 'now' : ago + 's ago';
     }
@@ -373,6 +379,10 @@
         sync_seek: `${src} seeked${at}`,
         sync_speed: `${src} set speed to <b>${esc(e.playback_rate)}x</b>`,
         sync_skip: `${src} skipped ${esc(e.skip_type || '')}${at}`,
+        sync_segment: `${src} entered ${esc(e.segment || 'segment')}${at} — holding partner`,
+        sync_segment_clear: `${src} left ${esc(e.segment || 'segment')}${at}`,
+        sync_align: `Synced ${esc(e.target_user || 'viewer')} to ${at || 'leader'}`,
+        align: `Dashboard sync align${at}`,
         sync_tab_away: `${src} switched tabs`,
         sync_tab_back: `${src} is back`,
         partner_left: `${src} left the video`,
@@ -458,6 +468,23 @@
     // ── Controls ────────────────────────────────────────
     $('playAll').addEventListener('click', () => { sendCommand('play'); logEvent('Sent <b>play</b> to both'); });
     $('pauseAll').addEventListener('click', () => { sendCommand('pause'); logEvent('Sent <b>pause</b> to both'); });
+    $('syncBoth').addEventListener('click', async () => {
+      const btn = $('syncBoth');
+      btn.disabled = true;
+      try {
+        const res = await api('/sync/align', { method: 'POST', body: '{}' });
+        if (res.status === 'ok') {
+          const mode = res.soft ? 'soft catch-up' : 'hard seek';
+          logEvent(`Synced <b>${esc(res.follower)}</b> to <b>${esc(res.leader)}</b> @ ${fmtTime(res.seconds)} (${mode}, gap ${res.gap}s)`);
+        } else {
+          logEvent(`Sync failed: <b>${esc(res.status || 'unknown')}</b>`);
+        }
+      } catch (err) {
+        logEvent('Sync failed — are both watching the same title?');
+      } finally {
+        setTimeout(() => { btn.disabled = false; }, 800);
+      }
+    });
     $('seekAll').addEventListener('click', () => {
       const s = parseSeek($('seekInput').value);
       if (s === null) return;

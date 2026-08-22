@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Netflix Connect",
   "version": "0.5.0",
-  "description": "Watch Netflix together with real-time sync and playback controls.",
+  "description": "Watch Netflix together with smart soft-sync, intro/recap matching, and playback controls.",
   "icons": {
     "16": "images/icon.png",
     "48": "images/icon.png",

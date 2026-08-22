@@ -27,6 +27,7 @@ const ncTelemetry = {
       network: ncNetworkStateLabel(p.networkState),
       frames: p.frames ?? 0,
       dropped: p.dropped ?? 0,
+      segment: (typeof ncSync !== 'undefined' && ncSync.currentSegment) || null,
       ...rest,
     };
 

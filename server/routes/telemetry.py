@@ -65,6 +65,7 @@ def receive_telemetry(payload: TelemetryPayload) -> dict[str, Any]:
         "server_time": now,
         "url": payload.url,
         "watch_id": _watch_id_from_url(payload.url),
+        "segment": payload.segment,
     }
     state.playback[user] = new
 
@@ -84,6 +85,7 @@ def receive_telemetry(payload: TelemetryPayload) -> dict[str, Any]:
             "frames": payload.frames,
             "dropped": payload.dropped,
             "action": payload.action,
+            "segment": payload.segment,
             "timestamp": now.isoformat(),
         },
     )

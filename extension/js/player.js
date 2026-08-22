@@ -122,12 +122,18 @@ const ncPlayer = {
       return;
     }
 
-    // Gentle proportional adjustment, capped so it stays subtle.
-    const adjust = Math.sign(drift) * Math.min(
+    // Gentle proportional adjustment. When behind, add a small boost so
+    // catch-up is noticeable without sounding weird.
+    let magnitude = Math.min(
       NC_CONFIG.SOFT_SYNC_MAX_ADJUST,
       Math.max(0.08, Math.abs(drift) / 12)
     );
-    const rate = Math.max(0.5, s.baseRate + adjust);
+    if (drift > 0) magnitude = Math.min(
+      NC_CONFIG.SOFT_SYNC_MAX_ADJUST,
+      magnitude + (NC_CONFIG.SOFT_SYNC_BEHIND_BOOST || 0)
+    );
+    const adjust = Math.sign(drift) * magnitude;
+    const rate = Math.max(0.5, Math.min(2.0, s.baseRate + adjust));
     if (v.playbackRate !== rate) {
       this._mark('rate');
       v.playbackRate = rate;

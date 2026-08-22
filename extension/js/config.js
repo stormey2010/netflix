@@ -17,6 +17,7 @@ const NC_CONFIG = {
     COMMAND: `${NC_API_BASE}/command`,
     SYNC: `${NC_API_BASE}/sync`,
     SYNC_DRIFT: `${NC_API_BASE}/sync/drift`,
+    SYNC_ALIGN: `${NC_API_BASE}/sync/align`,
     NAV_UPDATE: `${NC_API_BASE}/nav/update`,
     INVITE_SEND: `${NC_API_BASE}/invite/send`,
     INVITE_ACCEPT: `${NC_API_BASE}/invite/accept`,
@@ -37,7 +38,8 @@ const NC_CONFIG = {
   FAST_DEBOUNCE_MS: 100,
   THROTTLE_MS: 300,
   NAV_DELAY_MS: 500,
-  DRIFT_CHECK_INTERVAL_MS: 120000,
+  DRIFT_CHECK_INTERVAL_MS: 120000, // prompt when far ahead
+  CATCHUP_CHECK_INTERVAL_MS: 8000, // auto soft catch-up when behind
   DRIFT_THRESHOLD_S: 5,
   SEEK_APPLY_THRESHOLD_S: 2,   // ignore remote seeks closer than this
   REMOTE_SUPPRESS_MS: 1500,    // echo-suppression window after remote actions
@@ -47,8 +49,12 @@ const NC_CONFIG = {
   SOFT_SYNC_MIN_S: 0.75,       // drifts below this are considered in sync already
   SOFT_SYNC_DONE_S: 0.2,       // stop nudging once within this of the target
   SOFT_SYNC_TICK_MS: 250,      // how often to re-evaluate while nudging
-  SOFT_SYNC_MAX_ADJUST: 0.35,  // max playback-rate delta (+/-) while nudging
+  SOFT_SYNC_MAX_ADJUST: 0.4,   // max playback-rate delta (+/-) while nudging
+  SOFT_SYNC_BEHIND_BOOST: 0.12,// extra rate boost when catching up from behind
   SOFT_SYNC_TIMEOUT_MS: 60000, // give up nudging after this long
+
+  // Intro / recap segment detection
+  SEGMENT_POLL_MS: 1000,
 
   // SSE retry backoff
   INITIAL_RETRY_MS: 500,
