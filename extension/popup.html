@@ -211,6 +211,25 @@
     .status-toast.error { background: #3a1216; color: #ff8a90; border: 1px solid rgba(229, 9, 20, 0.3); }
     .status-toast.ok { background: #0f2b18; color: #6fe39a; border: 1px solid rgba(45, 213, 115, 0.25); }
     .status-toast:empty { display: none; }
+
+    /* Updater */
+    .update-card {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .update-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .update-meta { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+    .update-meta b { color: var(--text); font-weight: 600; }
+    .update-toggle {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 10px; font-size: 11px; color: var(--muted);
+    }
+    .update-toggle input { accent-color: var(--red); }
+    .btn.update { margin-top: 10px; }
+    .btn.update:disabled { opacity: 0.55; cursor: default; }
   </style>
 </head>
 <body>
@@ -255,6 +274,20 @@
       <div class="netflix-hint" id="netflixHint">
         Open netflix.com in a tab for playback sync to work.
       </div>
+
+      <div class="update-card" id="updateCard">
+        <div class="update-row">
+          <div>
+            <div style="font-size:12px;font-weight:700;">Netflix Connect</div>
+            <div class="update-meta" id="updateMeta">Version <b id="localVersion">…</b></div>
+          </div>
+        </div>
+        <button id="updateBtn" class="btn update" disabled>Checking…</button>
+        <label class="update-toggle">
+          <input type="checkbox" id="autoUpdateToggle" checked />
+          Automatically install updates
+        </label>
+      </div>
     </div>
 
     <!-- Watchlist tab -->
@@ -282,6 +315,7 @@
   <div class="status-toast" id="status"></div>
 
   <script src="js/config.js"></script>
+  <script src="js/updater.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

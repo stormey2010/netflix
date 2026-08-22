@@ -274,6 +274,103 @@ async function loadStats() {
   }
 }
 
+// === Updater (macOS Native Messaging) ======================================
+
+let updateState = { ready: false, available: false, remoteVersion: null };
+
+function setUpdateUI({ label, detail, disabled, available }) {
+  const btn = $('updateBtn');
+  const meta = $('updateMeta');
+  if (btn) {
+    btn.textContent = label;
+    btn.disabled = !!disabled;
+  }
+  if (typeof available === 'boolean') updateState.available = available;
+  if (detail && meta) meta.innerHTML = detail;
+}
+
+async function refreshUpdater() {
+  const manifest = chrome.runtime.getManifest();
+  const localVersion = manifest.version || '?';
+  $('localVersion').textContent = localVersion;
+
+  setUpdateUI({ label: 'Checking…', disabled: true });
+
+  const status = await ncUpdaterStatus();
+  if (!status.success || status.helperInstalled === false) {
+    setUpdateUI({
+      label: 'Helper not installed',
+      disabled: true,
+      available: false,
+      detail: `Version <b>${localVersion}</b> · Run Install Netflix Connect.command on your Mac`,
+    });
+    return;
+  }
+
+  const check = await ncCheckUpdate();
+  if (!check.success) {
+    setUpdateUI({
+      label: 'Check failed',
+      disabled: false,
+      available: false,
+      detail: `Version <b>${localVersion}</b> · ${check.error || 'Unknown error'}`,
+    });
+    // Allow retry via button
+    $('updateBtn').textContent = 'Retry check';
+    $('updateBtn').onclick = () => refreshUpdater();
+    return;
+  }
+
+  const commitShort = (check.remoteCommit || check.installedCommit || '').slice(0, 7);
+  if (check.changed) {
+    setUpdateUI({
+      label: 'Update',
+      disabled: false,
+      available: true,
+      detail: `Version <b>${localVersion}</b> · Update available${commitShort ? ` (${commitShort})` : ''}`,
+    });
+    $('updateBtn').onclick = () => runUpdate();
+  } else {
+    setUpdateUI({
+      label: 'Up to date',
+      disabled: true,
+      available: false,
+      detail: `Version <b>${localVersion}</b>${commitShort ? ` · ${commitShort}` : ''}`,
+    });
+  }
+  updateState.ready = true;
+}
+
+async function runUpdate() {
+  setUpdateUI({ label: 'Updating…', disabled: true });
+  const result = await ncRunUpdate();
+  if (!result.success) {
+    setStatus(result.error || 'Update failed', 'error');
+    setUpdateUI({ label: 'Update', disabled: false, available: true });
+    $('updateBtn').onclick = () => runUpdate();
+    return;
+  }
+  if (!result.changed) {
+    setStatus('Already up to date', 'ok');
+    await refreshUpdater();
+    return;
+  }
+  setStatus(`Updated to ${result.newVersion || 'latest'}`, 'ok');
+  setTimeout(() => chrome.runtime.reload(), 400);
+}
+
+async function setupUpdaterUI() {
+  const stored = await chrome.storage.sync.get({ autoInstallUpdates: true });
+  const toggle = $('autoUpdateToggle');
+  if (toggle) {
+    toggle.checked = !!stored.autoInstallUpdates;
+    toggle.addEventListener('change', () => {
+      chrome.storage.sync.set({ autoInstallUpdates: toggle.checked });
+    });
+  }
+  await refreshUpdater();
+}
+
 // === Init ==================================================================
 
 async function init() {
@@ -304,6 +401,7 @@ async function init() {
   checkNetflixTab();
   await refreshState();
   pollTimer = setInterval(refreshState, 4000);
+  setupUpdaterUI();
 }
 
 init();
