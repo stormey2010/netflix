@@ -40,12 +40,12 @@ ALLOWED_ORIGINS = [
     "https://www.netflix.com",
     "https://netflix.com",
     "https://netflix-api.faredrop.xyz",
-    "http://localhost:8765",
+    "http://localhost:8767",
 ]
 ALLOWED_ORIGIN_REGEX = (
     r"(https://([a-z0-9-]+\.)?netflix\.com)"
     r"|(chrome-extension://.+)"
-    r"|(http://localhost:8765)"
+    r"|(http://localhost:8767)"
     r"|(https://netflix-api\.faredrop\.xyz)"
 )
 

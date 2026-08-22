@@ -31,7 +31,7 @@ class Settings:
     dashboard_password: str
     users: tuple[str, str] = ("Parker", "Emily")
     host: str = "0.0.0.0"
-    port: int = 8765
+    port: int = 8767
     cloudflared_path: str = r"C:\cloudflared\cloudflared.exe"
     tunnel_name: str = "netflixapi"
     # Ingress config (hostname -> localhost mapping) lives at the repo root.

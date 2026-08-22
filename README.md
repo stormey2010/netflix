@@ -97,14 +97,14 @@ netflix/
 ```bash
 cd server
 pip install -r requirements.txt
-python -m uvicorn app:app --host 0.0.0.0 --port 8765
+python -m uvicorn app:app --host 0.0.0.0 --port 8767
 ```
 
 or double-click `start-server.bat` on Windows. The server also starts the
 Cloudflare tunnel automatically if `cloudflared` is installed at
 `C:\cloudflared\cloudflared.exe` (configurable in `server/config.py`).
 
-Dashboard: <http://localhost:8765/dashboard>
+Dashboard: <http://localhost:8767/dashboard>
 
 ## Installing the extension
 

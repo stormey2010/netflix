@@ -3,5 +3,5 @@ credentials-file: C:\Users\parke\.cloudflared\e0196d18-f95b-46f8-9f68-f6fb7b21a8
 
 ingress:
   - hostname: netflix-api.faredrop.xyz
-    service: http://localhost:8765
+    service: http://localhost:8767
   - service: http_status:404
