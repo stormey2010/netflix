@@ -112,3 +112,5 @@ Dashboard: <http://localhost:8767/dashboard>
 2. Enable "Developer mode"
 3. Click "Load unpacked" and select the `extension` folder
 4. Pick your profile on the setup page that opens
+
+<!-- updater smoke test: 0.5.8 -->
