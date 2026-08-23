@@ -10,8 +10,8 @@ chrome.runtime.onInstalled.addListener((details) => {
         chrome.tabs.create({ url: chrome.runtime.getURL('setup.html') });
       }
     });
-    // Opt into auto-updates when the Mac helper is used.
-    chrome.storage.sync.set({ autoInstallUpdates: true });
+    // Keep auto-install off by default for unpacked installs.
+    chrome.storage.sync.set({ autoInstallUpdates: false });
   }
   ncEnsureUpdateAlarm();
 });

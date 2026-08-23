@@ -55,6 +55,10 @@ function setUpdateUI({ label, detail, disabled }) {
   if (detail && meta) meta.innerHTML = detail;
 }
 
+function openInstallerRepo() {
+  chrome.tabs.create({ url: NC_INSTALLER_URL });
+}
+
 async function refreshUpdater() {
   const manifest = chrome.runtime.getManifest();
   const localVersion = manifest.version || '?';
@@ -69,11 +73,25 @@ async function refreshUpdater() {
       : (status.error || 'Helper not installed');
     const id = status.extensionId || chrome.runtime.id || '?';
     setUpdateUI({
-      label: 'Retry',
+      label: 'Open installer',
       disabled: false,
       detail: `Version <b>${localVersion}</b> · ID <code>${id}</code><br>${diagnosis}`,
     });
-    $('updateBtn').onclick = () => refreshUpdater();
+    $('updateBtn').onclick = () => openInstallerRepo();
+    return;
+  }
+
+  // Old helpers rename/delete Chrome's extension folder. Refuse to run them.
+  if (!ncHelperIsCurrent(status)) {
+    setUpdateUI({
+      label: 'Fix helper first',
+      disabled: false,
+      detail:
+        `Version <b>${localVersion}</b><br>` +
+        'Your Mac helper is outdated and is what was deleting the extension. ' +
+        'Re-run <b>Install Netflix Connect.command</b> once (from netflixupdater), Cmd+Q Chrome, then come back.',
+    });
+    $('updateBtn').onclick = () => openInstallerRepo();
     return;
   }
 
@@ -85,6 +103,16 @@ async function refreshUpdater() {
       detail: `Version <b>${localVersion}</b> · ${check.error || 'Unknown error'}`,
     });
     $('updateBtn').onclick = () => refreshUpdater();
+    return;
+  }
+
+  if (!ncHelperIsCurrent(check)) {
+    setUpdateUI({
+      label: 'Fix helper first',
+      disabled: false,
+      detail: 'Helper is outdated. Re-run Install Netflix Connect.command before updating.',
+    });
+    $('updateBtn').onclick = () => openInstallerRepo();
     return;
   }
 
@@ -108,6 +136,18 @@ async function refreshUpdater() {
 
 async function runUpdate() {
   setUpdateUI({ label: 'Updating…', disabled: true });
+
+  const status = await ncUpdaterStatus();
+  if (!ncHelperIsCurrent(status)) {
+    setUpdateUI({
+      label: 'Fix helper first',
+      disabled: false,
+      detail: 'Blocked: outdated helper can delete the extension. Re-run the installer first.',
+    });
+    $('updateBtn').onclick = () => openInstallerRepo();
+    return;
+  }
+
   const result = await ncRunUpdate();
   if (!result.success) {
     setUpdateUI({
@@ -122,27 +162,31 @@ async function runUpdate() {
     await refreshUpdater();
     return;
   }
+
   setUpdateUI({
-    label: 'Reloading…',
+    label: 'Finishing…',
     disabled: true,
-    detail: `Updated to <b>${result.newVersion || 'latest'}</b> — reloading extension…`,
+    detail: `Updated to <b>${result.newVersion || 'latest'}</b> — verifying files…`,
   });
-  setTimeout(() => {
-    try {
-      chrome.runtime.reload();
-    } catch {
-      setUpdateUI({
-        label: 'Open extensions',
-        disabled: false,
-        detail: 'Files updated. Open chrome://extensions and click Reload on Netflix Connect.',
-      });
-      $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
-    }
-  }, 600);
+
+  // Only reload if Chrome can still read this extension's files.
+  await new Promise((r) => setTimeout(r, 400));
+  if (await ncSafeReload()) return;
+
+  setUpdateUI({
+    label: 'Open extensions',
+    disabled: false,
+    detail:
+      'Files were updated, but Chrome needs a manual reload. ' +
+      'Open chrome://extensions → Netflix Connect → Reload. ' +
+      'If it errors, Remove + Load unpacked from ~/Library/Application Support/NetflixConnect/extension',
+  });
+  $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
 }
 
 async function setupUpdaterUI() {
-  const stored = await chrome.storage.sync.get({ autoInstallUpdates: true });
+  // Default auto-install OFF — silent updates were breaking unpacked installs.
+  const stored = await chrome.storage.sync.get({ autoInstallUpdates: false });
   const toggle = $('autoUpdateToggle');
   if (toggle) {
     toggle.checked = !!stored.autoInstallUpdates;

@@ -5,8 +5,10 @@
 
 const NC_NATIVE_HOST = 'xyz.faredrop.netflixconnect.updater';
 const NC_EXPECTED_EXT_ID = 'lajgengnbhhmlgmfnhhjihceohjklkci';
+const NC_MIN_PROTOCOL = 2;
 const NC_UPDATE_ALARM = 'nc-update-check';
 const NC_UPDATE_PERIOD_MINUTES = 360; // 6 hours
+const NC_INSTALLER_URL = 'https://github.com/stormey2010/netflixupdater';
 
 function ncNativeMessage(payload) {
   return new Promise((resolve) => {
@@ -49,6 +51,11 @@ async function ncRunUpdate() {
   return ncNativeMessage({ action: 'update' });
 }
 
+function ncHelperIsCurrent(status) {
+  const v = Number(status?.protocolVersion || 0);
+  return status?.success && status?.helperInstalled !== false && v >= NC_MIN_PROTOCOL;
+}
+
 function ncDiagnoseHelperError(status) {
   const id = status.extensionId || chrome.runtime.id || '';
   const err = (status.chromeError || status.error || '').toLowerCase();
@@ -59,6 +66,13 @@ function ncDiagnoseHelperError(status) {
       `Wrong extension ID (<code>${id}</code>). Expected <code>${NC_EXPECTED_EXT_ID}</code>. ` +
       `Remove the extension and Load unpacked from ~/Library/Application Support/NetflixConnect/extension`
     );
+  }
+
+  if (status.helperInstalled !== false && !ncHelperIsCurrent(status) && status.success) {
+    lines.push(
+      'Updater helper is outdated and can break Chrome. Re-run <b>Install Netflix Connect.command</b> from the netflixupdater repo once, then Cmd+Q Chrome.'
+    );
+    return lines.join(' ');
   }
 
   if (err.includes('not found') || err.includes('specified native messaging host')) {
@@ -84,6 +98,29 @@ function ncDiagnoseHelperError(status) {
   return lines.join(' ');
 }
 
+async function ncExtensionFilesOk() {
+  try {
+    const res = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data?.name === 'Netflix Connect' && !!data?.version;
+  } catch {
+    return false;
+  }
+}
+
+async function ncSafeReload() {
+  if (!(await ncExtensionFilesOk())) {
+    return false;
+  }
+  try {
+    chrome.runtime.reload();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ncIsNetflixPlaying() {
   try {
     const tabs = await chrome.tabs.query({ url: 'https://www.netflix.com/*' });
@@ -102,24 +139,9 @@ async function ncIsNetflixPlaying() {
 }
 
 async function ncMaybeAutoUpdate() {
-  const { autoInstallUpdates } = await chrome.storage.sync.get({ autoInstallUpdates: true });
-  if (!autoInstallUpdates) return;
-
-  const check = await ncCheckUpdate();
-  if (!check.success || !check.changed) return;
-
-  if (await ncIsNetflixPlaying()) {
-    return;
-  }
-
-  const result = await ncRunUpdate();
-  if (result.success && result.changed) {
-    try {
-      chrome.runtime.reload();
-    } catch {
-      // Unpacked path issues: leave the new files in place for a manual reload.
-    }
-  }
+  // Never auto-install/reload unpacked extensions — a bad helper used to
+  // delete Chrome's load path. Updates are one-click manual only.
+  return;
 }
 
 function ncEnsureUpdateAlarm() {
