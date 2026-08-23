@@ -114,7 +114,11 @@ async function ncMaybeAutoUpdate() {
 
   const result = await ncRunUpdate();
   if (result.success && result.changed) {
-    chrome.runtime.reload();
+    try {
+      chrome.runtime.reload();
+    } catch {
+      // Unpacked path issues: leave the new files in place for a manual reload.
+    }
   }
 }
 

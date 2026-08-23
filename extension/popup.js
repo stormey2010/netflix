@@ -367,8 +367,27 @@ async function runUpdate() {
     await refreshUpdater();
     return;
   }
+  setUpdateUI({
+    label: 'Reloading…',
+    disabled: true,
+    available: false,
+    detail: `Updated to <b>${result.newVersion || 'latest'}</b> — reloading extension…`,
+  });
   setStatus(`Updated to ${result.newVersion || 'latest'}`, 'ok');
-  setTimeout(() => chrome.runtime.reload(), 400);
+  // Give the filesystem a beat; helper now updates files in-place so reload works.
+  setTimeout(() => {
+    try {
+      chrome.runtime.reload();
+    } catch {
+      setUpdateUI({
+        label: 'Reload manually',
+        disabled: false,
+        available: false,
+        detail: 'Files updated. Open chrome://extensions and click Reload on Netflix Connect.',
+      });
+      $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
+    }
+  }, 600);
 }
 
 async function setupUpdaterUI() {
