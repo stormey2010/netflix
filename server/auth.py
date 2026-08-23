@@ -15,7 +15,8 @@ import hashlib
 import hmac
 import time
 
-from fastapi import Header, HTTPException, Query, Request, status
+from fastapi import Header, HTTPException, Query, status
+from starlette.requests import HTTPConnection
 
 from config import settings
 
@@ -56,7 +57,7 @@ def verify_dashboard_token(token: str | None) -> bool:
     return hmac.compare_digest(signature, _sign(expires_at))
 
 
-def has_dashboard_session(request: Request) -> bool:
+def has_dashboard_session(request: HTTPConnection) -> bool:
     return verify_dashboard_token(request.cookies.get(SESSION_COOKIE))
 
 
@@ -65,7 +66,7 @@ def has_dashboard_session(request: Request) -> bool:
 # ---------------------------------------------------------------------------
 
 async def require_api_key(
-    request: Request,
+    request: HTTPConnection,
     x_api_key: str | None = Header(None),
     api_key: str | None = Query(None),
 ) -> None:

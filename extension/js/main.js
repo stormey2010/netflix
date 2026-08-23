@@ -18,7 +18,7 @@
   ncUser.setupChangeListener();
 
   ncUser.load().then(() => {
-    ncStream.start();      // single unified SSE connection
+    ncStream.start();      // duplex WebSocket with automatic SSE fallback
     ncTelemetry.start();
     ncNavigation.init();
     ncDriftChecker.start();

@@ -1,9 +1,8 @@
 """Unified event bus.
 
 All real-time traffic (commands, navigation, invites, telemetry) flows
-through a single publish/subscribe bus. Clients open one SSE connection to
-/events/stream and pick the channels they care about, instead of the old
-model of four separate stream endpoints with duplicated subscriber lists.
+through one publish/subscribe bus. Extension clients use a duplex WebSocket;
+the dashboard and compatibility clients can use the SSE stream.
 """
 
 import asyncio

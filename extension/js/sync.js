@@ -16,6 +16,8 @@ const ncSync = {
   lastKnownTime: 0,
   lastPaused: true,
   lastPlaybackRate: 1.0,
+  lastSeqByStream: new Map(),
+  seenEventIds: new Set(),
   SEEK_DETECT_THRESHOLD_S: 1.0,
 
   // Current Netflix UI segment: null | 'intro' | 'recap'
@@ -32,14 +34,18 @@ const ncSync = {
   // === Outbound ===========================================================
 
   async send(command, seconds, extra = {}) {
-    if (!ncUser.current || this.isPageUnloading || !ncGetVideo()) return;
+    const video = ncGetVideo();
+    if (!ncUser.current || this.isPageUnloading || !video) return;
     const payload = {
       command,
-      seconds: Math.floor(seconds),
+      seconds: Math.round(Number(seconds) * 1000) / 1000,
       source_user: ncUser.current,
+      paused: video.paused,
+      rate: video.playbackRate,
       ...extra,
     };
     console.log(`[Netflix Connect] Sync out: ${command} @ ${payload.seconds}s`, extra);
+    if (ncStream.sendSync(payload)) return;
     try {
       await ncPost(NC_CONFIG.ENDPOINTS.SYNC, payload);
     } catch {
@@ -248,7 +254,32 @@ const ncSync = {
 
   // === Inbound ============================================================
 
+  acceptCommand(data) {
+    if (data.event_id) {
+      if (this.seenEventIds.has(data.event_id)) return false;
+      this.seenEventIds.add(data.event_id);
+      if (this.seenEventIds.size > 200) {
+        this.seenEventIds.delete(this.seenEventIds.values().next().value);
+      }
+    }
+    if (data.stream_id && Number.isFinite(data.seq)) {
+      const previous = this.lastSeqByStream.get(data.stream_id) || 0;
+      if (data.seq <= previous) return false;
+      this.lastSeqByStream.set(data.stream_id, data.seq);
+    }
+    const age = ncStream.estimatedEventAgeMs(data);
+    return age <= NC_CONFIG.COMMAND_STALE_MS;
+  },
+
+  compensatedSeconds(data, moving) {
+    if (!Number.isFinite(data.seconds)) return data.seconds;
+    if (!moving) return data.seconds;
+    const ageS = ncStream.estimatedEventAgeMs(data) / 1000;
+    return data.seconds + ageS * (Number(data.rate) || 1);
+  },
+
   handleCommand(data) {
+    if (!this.acceptCommand(data)) return;
     const partner = data.source_user || 'Partner';
     const soft = data.soft !== false; // prefer soft unless explicitly false
 
@@ -288,17 +319,17 @@ const ncSync = {
 
       case 'sync_play':
         this.holdingForPartnerSegment = false;
-        if (ncPlayer.remotePlay(data.seconds)) {
+        if (ncPlayer.remotePlay(this.compensatedSeconds(data, true))) {
           ncTelemetry.push({ action: 'sync_play_received' });
         }
         break;
       case 'sync_pause':
-        if (ncPlayer.remotePause(data.seconds)) {
+        if (ncPlayer.remotePause(this.compensatedSeconds(data, false))) {
           ncTelemetry.push({ action: 'sync_pause_received' });
         }
         break;
       case 'sync_seek':
-        if (ncPlayer.remoteSeek(data.seconds, { force: !soft })) {
+        if (ncPlayer.remoteSeek(this.compensatedSeconds(data, data.paused === false), { force: true })) {
           ncTelemetry.push({ action: 'sync_seek_received' });
         }
         break;
@@ -310,6 +341,7 @@ const ncSync = {
         break;
       case 'sync_skip':
         this.holdingForPartnerSegment = false;
+        data.seconds = this.compensatedSeconds(data, data.paused === false);
         if (ncPlayer.remoteSeek(data.seconds, { force: true })) {
           const label = { intro: 'Skipped intro', recap: 'Skipped recap' }[data.skip_type] || 'Skipped credits';
           ncNotifications.showNote(`${label} (synced)`, 2000);

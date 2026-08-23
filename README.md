@@ -27,7 +27,7 @@ netflix/
 │   │   ├── user.js            # Profile identity (chrome.storage.sync)
 │   │   ├── player.js          # Playback controller: remote actions, echo
 │   │   │                      #   suppression, soft sync (rate nudging)
-│   │   ├── stream.js          # Single unified SSE connection
+│   │   ├── stream.js          # WebSocket transport + SSE fallback
 │   │   ├── telemetry.js       # Playback state reporting (every 2s)
 │   │   ├── sync.js            # Outbound events + inbound command execution
 │   │   ├── navigation.js      # URL tracking & follow-partner
@@ -58,7 +58,7 @@ netflix/
 │   │   ├── navigation.py      # POST /nav/update, GET /nav/state
 │   │   ├── invites.py         # Invite lifecycle + /disconnect
 │   │   ├── library.py         # Watchlist / stats / sessions
-│   │   ├── events.py          # GET /events/stream (unified SSE)
+│   │   ├── events.py          # WebSocket + unified SSE fallback
 │   │   └── dashboard.py       # Dashboard login + UI
 │   └── templates/
 │       ├── dashboard.html
@@ -71,15 +71,19 @@ netflix/
 ### How sync works
 
 1. Each client reports telemetry every 2 seconds (`POST /telemetry`).
-2. Local playback events (play/pause/seek/rate) are relayed to the partner
-   through `POST /sync`, which publishes onto the server's event bus.
-3. Every client holds **one** SSE connection (`GET /events/stream`) and picks
-   the channels it needs (`command`, `nav`, `invite`; the dashboard also
-   subscribes to `telemetry`).
+2. Local playback events (play/pause/seek/rate) are sent immediately through
+   the open WebSocket and relayed through the server's event bus.
+3. Every extension client holds one duplex WebSocket (`GET /events/ws`) and
+   sends playback events over that same connection. This removes the extra
+   HTTP request from play/pause/seek. SSE + HTTP remain an automatic fallback;
+   the dashboard continues to subscribe to telemetry over SSE.
 4. Incoming commands are applied through the player controller, which opens a
    short suppression window per action type so applied commands are never
    echoed back (no feedback loops).
-5. Drift handling: differences up to ~10s are resolved with a gentle playback
+5. Commands carry millisecond positions, monotonic sequence IDs, and timing
+   metadata. Receivers discard stale/out-of-order events and compensate a
+   playing target for measured network transit time. Drift handling:
+   differences up to ~10s are resolved with a gentle playback
    rate adjustment on the lagging side (soft sync); larger gaps hard-seek via
    Netflix's player API through `page-bridge.js`.
 
@@ -113,4 +117,4 @@ Dashboard: <http://localhost:8767/dashboard>
 3. Click "Load unpacked" and select the `extension` folder
 4. Pick your profile on the setup page that opens
 
-<!-- updater smoke test: 0.6.1 -->
+<!-- updater smoke test: 0.7.0 -->

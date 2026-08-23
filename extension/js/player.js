@@ -195,9 +195,11 @@ const ncPlayer = {
   remotePlay(seconds = null) {
     const v = this.video();
     if (!v || !this.isReady()) return false;
+    if (seconds !== null && Math.abs(v.currentTime - seconds) > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) {
+      this.syncTo(seconds, { force: true, moving: true });
+    }
     this._mark('play');
     v.play().catch(() => {});
-    if (seconds !== null) this.syncTo(seconds, { moving: true });
     return true;
   },
 
@@ -208,9 +210,9 @@ const ncPlayer = {
     this._mark('pause');
     v.pause();
     // Can't rate-nudge while paused; hard-align if meaningfully off.
-    if (seconds !== null && seconds > 0) {
+    if (seconds !== null && seconds >= 0) {
       const drift = Math.abs(v.currentTime - seconds);
-      if (drift > NC_CONFIG.SEEK_APPLY_THRESHOLD_S) this._hardSeek(seconds);
+      if (drift > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) this._hardSeek(seconds);
     }
     return true;
   },

@@ -14,6 +14,7 @@ const NC_CONFIG = {
   ENDPOINTS: {
     TELEMETRY: `${NC_API_BASE}/telemetry`,
     EVENTS_STREAM: `${NC_API_BASE}/events/stream`,
+    EVENTS_WS: `${NC_API_BASE}/events/ws`,
     COMMAND: `${NC_API_BASE}/command`,
     SYNC: `${NC_API_BASE}/sync`,
     SYNC_DRIFT: `${NC_API_BASE}/sync/drift`,
@@ -59,6 +60,10 @@ const NC_CONFIG = {
   // SSE retry backoff
   INITIAL_RETRY_MS: 500,
   MAX_RETRY_MS: 5000,
+  WS_FALLBACK_DELAY_MS: 700,
+  WS_PING_INTERVAL_MS: 10000,
+  COMMAND_STALE_MS: 5000,
+  EXACT_SYNC_THRESHOLD_S: 0.12,
 };
 
 function ncForceHttps(url) {

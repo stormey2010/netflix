@@ -31,7 +31,7 @@ const ncUser = {
         this.current = changes.user.newValue || 'unknown';
         console.log('[Netflix Connect] User changed to:', this.current);
         // Reconnect the stream so server-side targeting uses the new identity.
-        if (typeof ncStream !== 'undefined' && ncStream.sse) ncStream.restart();
+        if (typeof ncStream !== 'undefined' && !ncStream.stopped) ncStream.restart();
       }
     });
   },

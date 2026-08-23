@@ -48,6 +48,12 @@ class SyncPayload(BaseModel):
     skip_type: str | None = Field(None, description="intro, recap, or credits")
     segment: str | None = Field(None, description="intro or recap for sync_segment")
     soft: bool | None = Field(None, description="Prefer soft rate-nudge when seeking")
+    paused: bool | None = Field(None, description="Sender playback state at capture time")
+    rate: float | None = Field(None, description="Sender playback rate at capture time")
+    event_id: str | None = Field(None, description="Client-generated deduplication id")
+    stream_id: str | None = Field(None, description="Client stream generation id")
+    seq: int | None = Field(None, description="Monotonic sequence within the stream")
+    client_sent_ms: float | None = Field(None, description="Client wall clock when sent")
 
 
 class InvitePayload(BaseModel):

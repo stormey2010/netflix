@@ -39,6 +39,12 @@ def sync_playback(payload: SyncPayload) -> dict[str, Any]:
         event["segment"] = payload.segment
     if payload.soft is not None:
         event["soft"] = payload.soft
+    for key in ("paused", "rate", "event_id", "stream_id", "seq", "client_sent_ms"):
+        value = getattr(payload, key)
+        if value is not None:
+            event[key] = value
+    event["server_received_ms"] = utcnow().timestamp() * 1000
+    event["transport"] = "http"
 
     print(f"[SYNC] {payload.source_user} -> {target}: {payload.command} @ {payload.seconds:.1f}s")
     bus.publish("command", event, target_user=target)

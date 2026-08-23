@@ -2,7 +2,7 @@
 
 FastAPI app that coordinates the watch-together experience between two users
 by relaying telemetry, playback sync, commands, and navigation state over a
-single unified SSE event bus.
+WebSocket-first unified event bus with SSE fallback.
 """
 
 import re
@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
 # Application
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Netflix Connect API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Netflix Connect API", version="1.1.0", lifespan=lifespan)
 
 
 class EnsureCORSOnErrorsMiddleware(BaseHTTPMiddleware):
