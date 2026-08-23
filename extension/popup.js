@@ -343,11 +343,12 @@ async function refreshUpdater() {
     $('updateBtn').onclick = () => runUpdate();
   } else {
     setUpdateUI({
-      label: 'Up to date',
-      disabled: true,
+      label: 'Check again',
+      disabled: false,
       available: false,
-      detail: `Version <b>${localVersion}</b>${commitShort ? ` · ${commitShort}` : ''}`,
+      detail: `Version <b>${localVersion}</b> · Up to date${commitShort ? ` · ${commitShort}` : ''}`,
     });
+    $('updateBtn').onclick = () => refreshUpdater();
   }
   updateState.ready = true;
 }
