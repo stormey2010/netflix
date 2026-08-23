@@ -298,12 +298,18 @@ async function refreshUpdater() {
 
   const status = await ncUpdaterStatus();
   if (!status.success || status.helperInstalled === false) {
+    const diagnosis = typeof ncDiagnoseHelperError === 'function'
+      ? ncDiagnoseHelperError(status)
+      : (status.error || 'Helper not installed');
+    const id = status.extensionId || chrome.runtime.id || '?';
     setUpdateUI({
-      label: 'Helper not installed',
-      disabled: true,
+      label: 'Fix helper',
+      disabled: false,
       available: false,
-      detail: `Version <b>${localVersion}</b> · Run Install Netflix Connect.command on your Mac`,
+      detail: `Version <b>${localVersion}</b> · ID <code>${id}</code><br>${diagnosis}`,
     });
+    $('updateBtn').textContent = 'Retry';
+    $('updateBtn').onclick = () => refreshUpdater();
     return;
   }
 
