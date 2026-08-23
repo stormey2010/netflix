@@ -1,13 +1,18 @@
 /**
- * Netflix Connect - macOS Native Messaging updater client
+ * Netflix Connect - macOS Native Messaging updater client (protocol v4+)
  * Host: xyz.faredrop.netflixconnect.updater
+ *
+ * Update sequencing (one button, two native processes):
+ *   status → update_helper → status → update_extension → status → reload
+ * Never call legacy action "update". Never trust fetch(manifest) alone.
  */
 
 const NC_NATIVE_HOST = 'xyz.faredrop.netflixconnect.updater';
 const NC_EXPECTED_EXT_ID = 'lajgengnbhhmlgmfnhhjihceohjklkci';
-const NC_MIN_PROTOCOL = 3;
+const NC_MIN_PROTOCOL = 4;
+const NC_EXPECTED_EXT_PATH_SUFFIX = '/NetflixConnect/extension';
 const NC_UPDATE_ALARM = 'nc-update-check';
-const NC_UPDATE_PERIOD_MINUTES = 360; // 6 hours
+const NC_UPDATE_PERIOD_MINUTES = 360;
 const NC_INSTALLER_URL = 'https://github.com/stormey2010/netflixupdater';
 
 function ncNativeMessage(payload) {
@@ -47,13 +52,37 @@ async function ncCheckUpdate() {
   return ncNativeMessage({ action: 'check_update' });
 }
 
-async function ncRunUpdate() {
-  return ncNativeMessage({ action: 'update' });
+async function ncUpdateHelper() {
+  return ncNativeMessage({ action: 'update_helper' });
+}
+
+async function ncUpdateExtension() {
+  return ncNativeMessage({ action: 'update_extension' });
+}
+
+function ncPathIsCanonical(status) {
+  const p = String(status?.extensionPath || '').replace(/\\/g, '/');
+  return p.endsWith(NC_EXPECTED_EXT_PATH_SUFFIX) || p.endsWith('/extension');
 }
 
 function ncHelperIsCurrent(status) {
   const v = Number(status?.protocolVersion || 0);
-  return status?.success && status?.helperInstalled !== false && v >= NC_MIN_PROTOCOL;
+  return (
+    !!status?.success &&
+    status?.helperInstalled !== false &&
+    v >= NC_MIN_PROTOCOL &&
+    status?.safeUpdate === true &&
+    ncPathIsCanonical(status)
+  );
+}
+
+function ncReloadSafe(status) {
+  return (
+    ncHelperIsCurrent(status) &&
+    status.diskManifestOK === true &&
+    !!status.diskManifestVersion &&
+    status.reloadSafe !== false
+  );
 }
 
 function ncDiagnoseHelperError(status) {
@@ -68,24 +97,22 @@ function ncDiagnoseHelperError(status) {
     );
   }
 
-  if (status.helperInstalled !== false && !ncHelperIsCurrent(status) && status.success) {
+  if (status.helperInstalled !== false && status.success && !ncHelperIsCurrent(status)) {
     lines.push(
-      'Updater helper is outdated and can break Chrome. Re-run <b>Install Netflix Connect.command</b> from the netflixupdater repo once, then Cmd+Q Chrome.'
+      'Updater helper is outdated (need protocol 4+). Re-run <b>Install Netflix Connect.command</b>, then Cmd+Q Chrome.'
     );
     return lines.join(' ');
   }
 
   if (err.includes('not found') || err.includes('specified native messaging host')) {
     lines.push(
-      'Chrome cannot find the native host. Quit Chrome fully (Cmd+Q), re-run Install Netflix Connect.command, then reopen Chrome.'
+      'Chrome cannot find the native host. Quit Chrome (Cmd+Q), re-run Install Netflix Connect.command, reopen Chrome.'
     );
   } else if (err.includes('forbidden') || err.includes('access')) {
-    lines.push(
-      'Host found but this extension ID is not allowed. Re-run the installer and confirm the ID matches.'
-    );
+    lines.push('Host found but this extension ID is not allowed. Re-run the installer.');
   } else if (err.includes('exited') || err.includes('native host has exited')) {
     lines.push(
-      'Helper launched then crashed (often macOS quarantine). Re-run the installer, or run: ' +
+      'Helper crashed (often quarantine). Re-run installer or: ' +
       '<code>xattr -cr ~/Library/Application\\ Support/NetflixConnect/updater</code>'
     );
   } else if (status.error) {
@@ -93,54 +120,84 @@ function ncDiagnoseHelperError(status) {
   }
 
   if (!lines.length) {
-    lines.push('Helper not reachable. Re-run Install Netflix Connect.command, then Cmd+Q Chrome and reopen.');
+    lines.push('Helper not reachable. Re-run Install Netflix Connect.command, then Cmd+Q Chrome.');
   }
   return lines.join(' ');
 }
 
-async function ncExtensionFilesOk() {
-  try {
-    const res = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data?.name === 'Netflix Connect' && !!data?.version;
-  } catch {
-    return false;
+/**
+ * One-click update: refresh helper in its own process, then update extension
+ * in a NEW helper process. Never mutates extension with an outdated in-memory binary.
+ */
+async function ncRunSafeUpdate() {
+  const before = await ncUpdaterStatus();
+  if (!before.success || before.helperInstalled === false) {
+    return { success: false, error: before.error || 'Helper not installed', phase: 'status' };
   }
-}
+  if (Number(before.protocolVersion || 0) < NC_MIN_PROTOCOL) {
+    return {
+      success: false,
+      error: 'Helper protocol too old — re-run Install Netflix Connect.command',
+      phase: 'protocol',
+      needsInstaller: true,
+    };
+  }
 
-async function ncSafeReload() {
-  if (!(await ncExtensionFilesOk())) {
-    return false;
-  }
-  try {
-    chrome.runtime.reload();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function ncIsNetflixPlaying() {
-  try {
-    const tabs = await chrome.tabs.query({ url: 'https://www.netflix.com/*' });
-    for (const tab of tabs) {
-      try {
-        const res = await chrome.tabs.sendMessage(tab.id, { type: 'np.getState' });
-        if (res?.hasVideo && res.paused === false) return true;
-      } catch {
-        // Content script may be absent on browse pages.
-      }
+  // Process A: replace helper binary only, then exit.
+  const helperResult = await ncUpdateHelper();
+  if (!helperResult.success) {
+    // Offline / download failure: continue only if current helper already meets protocol.
+    if (!ncHelperIsCurrent(before)) {
+      return { success: false, error: helperResult.error || 'Helper update failed', phase: 'update_helper' };
     }
-  } catch {
-    // ignore
   }
-  return false;
+
+  // Allow OS to finish replacing the executable; next call starts a new process.
+  await new Promise((r) => setTimeout(r, 400));
+
+  const mid = await ncUpdaterStatus();
+  if (!ncHelperIsCurrent(mid)) {
+    return {
+      success: false,
+      error: mid.error || 'New helper did not report protocol 4 / safeUpdate',
+      phase: 'post_helper_status',
+      needsInstaller: true,
+    };
+  }
+
+  // Process B (new binary): overlay extension files only.
+  const extResult = await ncUpdateExtension();
+  if (!extResult.success) {
+    return { ...extResult, phase: 'update_extension' };
+  }
+
+  await new Promise((r) => setTimeout(r, 300));
+  const after = await ncUpdaterStatus();
+  if (!ncReloadSafe(after)) {
+    return {
+      success: false,
+      error: 'Extension files updated but disk verification failed — not reloading',
+      phase: 'verify',
+      diskManifestOK: after.diskManifestOK,
+      extensionPath: after.extensionPath,
+      changed: extResult.changed,
+    };
+  }
+
+  return {
+    success: true,
+    changed: !!extResult.changed,
+    newVersion: after.diskManifestVersion || extResult.newVersion,
+    diskManifestOK: true,
+    reloadSafe: true,
+    extensionPath: after.extensionPath,
+    protocolVersion: after.protocolVersion,
+    phase: 'done',
+  };
 }
 
 async function ncMaybeAutoUpdate() {
-  // Never auto-install/reload unpacked extensions — a bad helper used to
-  // delete Chrome's load path. Updates are one-click manual only.
+  // Disabled until protocol-4 architecture is battle-tested.
   return;
 }
 

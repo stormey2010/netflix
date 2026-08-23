@@ -1,6 +1,6 @@
 /**
  * Netflix Connect - Setup
- * Profile picker + macOS updater controls.
+ * Profile picker + macOS updater controls (protocol v4 sequencing).
  */
 
 const AVATAR_GRADIENTS = [
@@ -81,15 +81,14 @@ async function refreshUpdater() {
     return;
   }
 
-  // Old helpers rename/delete Chrome's extension folder. Refuse to run them.
   if (!ncHelperIsCurrent(status)) {
     setUpdateUI({
       label: 'Fix helper first',
       disabled: false,
       detail:
         `Version <b>${localVersion}</b><br>` +
-        'Your Mac helper is outdated and is what was deleting the extension. ' +
-        'Re-run <b>Install Netflix Connect.command</b> once (from netflixupdater), Cmd+Q Chrome, then come back.',
+        'Need helper protocol <b>4+</b>. Re-run <b>Install Netflix Connect.command</b>, Cmd+Q Chrome, ' +
+        'Load unpacked from <code>~/Library/Application Support/NetflixConnect/extension</code> only.',
     });
     $('updateBtn').onclick = () => openInstallerRepo();
     return;
@@ -103,16 +102,6 @@ async function refreshUpdater() {
       detail: `Version <b>${localVersion}</b> · ${check.error || 'Unknown error'}`,
     });
     $('updateBtn').onclick = () => refreshUpdater();
-    return;
-  }
-
-  if (!ncHelperIsCurrent(check)) {
-    setUpdateUI({
-      label: 'Fix helper first',
-      disabled: false,
-      detail: 'Helper is outdated. Re-run Install Netflix Connect.command before updating.',
-    });
-    $('updateBtn').onclick = () => openInstallerRepo();
     return;
   }
 
@@ -135,55 +124,42 @@ async function refreshUpdater() {
 }
 
 async function runUpdate() {
-  setUpdateUI({ label: 'Updating…', disabled: true });
+  setUpdateUI({ label: 'Updating…', disabled: true, detail: 'Refreshing helper, then extension…' });
 
-  const status = await ncUpdaterStatus();
-  if (!ncHelperIsCurrent(status)) {
-    setUpdateUI({
-      label: 'Fix helper first',
-      disabled: false,
-      detail: 'Blocked: outdated helper can delete the extension. Re-run the installer first.',
-    });
-    $('updateBtn').onclick = () => openInstallerRepo();
-    return;
-  }
-
-  const result = await ncRunUpdate();
+  const result = await ncRunSafeUpdate();
   if (!result.success) {
+    if (result.needsInstaller) {
+      setUpdateUI({
+        label: 'Open installer',
+        disabled: false,
+        detail: result.error || 'Re-run the installer for helper protocol 4+',
+      });
+      $('updateBtn').onclick = () => openInstallerRepo();
+      return;
+    }
     setUpdateUI({
       label: 'Update',
       disabled: false,
-      detail: result.error || 'Update failed',
+      detail: `${result.error || 'Update failed'}${result.phase ? ` (${result.phase})` : ''}`,
     });
     $('updateBtn').onclick = () => runUpdate();
     return;
   }
+
   if (!result.changed) {
     await refreshUpdater();
     return;
   }
 
-  if (!result.diskManifestOK) {
+  // Authoritative disk check again immediately before reload.
+  const verify = await ncUpdaterStatus();
+  if (!ncReloadSafe(verify)) {
     setUpdateUI({
       label: 'Open extensions',
       disabled: false,
       detail:
-        'Update finished but the helper could not re-read manifest.json on disk. ' +
-        'Do <b>not</b> reload yet — re-run the installer, or Load unpacked from ' +
-        '<code>~/Library/Application Support/NetflixConnect/extension</code>',
-    });
-    $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
-    return;
-  }
-
-  // Re-read from disk through the helper (not Chrome's in-memory cache).
-  await new Promise((r) => setTimeout(r, 500));
-  const verify = await ncUpdaterStatus();
-  if (!verify.diskManifestOK || !verify.diskManifestVersion) {
-    setUpdateUI({
-      label: 'Open extensions',
-      disabled: false,
-      detail: 'Files may be incomplete on disk. Skip Reload — Load unpacked again from Application Support/NetflixConnect/extension',
+        'Files may be on disk but verification failed — do <b>not</b> force-reload. ' +
+        'Load unpacked from <code>~/Library/Application Support/NetflixConnect/extension</code>',
     });
     $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
     return;
@@ -195,21 +171,19 @@ async function runUpdate() {
     detail: `Disk OK at <b>${verify.diskManifestVersion}</b> — reloading…`,
   });
 
-  // Last resort if reload bricks: user can Load unpacked again; folder was not deleted.
   try {
     chrome.runtime.reload();
   } catch {
     setUpdateUI({
       label: 'Open extensions',
       disabled: false,
-      detail: `Updated to <b>${verify.diskManifestVersion}</b> on disk. Click Reload on chrome://extensions.`,
+      detail: `Updated to <b>${verify.diskManifestVersion}</b>. Click Reload on chrome://extensions.`,
     });
     $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
   }
 }
 
 async function setupUpdaterUI() {
-  // Default auto-install OFF — silent updates were breaking unpacked installs.
   const stored = await chrome.storage.sync.get({ autoInstallUpdates: false });
   const toggle = $('autoUpdateToggle');
   if (toggle) {
