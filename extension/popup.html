@@ -211,33 +211,6 @@
     .status-toast.error { background: #3a1216; color: #ff8a90; border: 1px solid rgba(229, 9, 20, 0.3); }
     .status-toast.ok { background: #0f2b18; color: #6fe39a; border: 1px solid rgba(45, 213, 115, 0.25); }
     .status-toast:empty { display: none; }
-
-    /* Settings */
-    .settings-section { margin-bottom: 18px; }
-    .settings-section:last-child { margin-bottom: 0; }
-    .settings-label {
-      font-size: 10px; font-weight: 700;
-      color: var(--faint);
-      text-transform: uppercase; letter-spacing: 1.1px;
-      margin-bottom: 8px;
-    }
-    .update-card {
-      padding: 12px 14px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }
-    .update-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .update-meta { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
-    .update-meta b, .update-meta code { color: var(--text); font-weight: 600; }
-    .update-meta code { font-size: 10px; word-break: break-all; }
-    .update-toggle {
-      display: flex; align-items: center; gap: 8px;
-      margin-top: 10px; font-size: 11px; color: var(--muted);
-    }
-    .update-toggle input { accent-color: var(--red); }
-    .btn.update { margin-top: 10px; }
-    .btn.update:disabled { opacity: 0.55; cursor: default; }
   </style>
 </head>
 <body>
@@ -247,7 +220,7 @@
       <div class="header-title" id="userName">Netflix Connect</div>
       <div class="header-sub" id="hintText">Watch together</div>
     </div>
-    <button class="icon-btn" id="settingsBtn" title="Settings">
+    <button class="icon-btn" id="settingsBtn" title="Switch profile">
       <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.61 3.61 0 0 1 8.4 12c0-1.98 1.62-3.6 3.6-3.6s3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
     </button>
   </div>
@@ -256,7 +229,6 @@
     <button class="tab-btn active" data-tab="connect">Session</button>
     <button class="tab-btn" data-tab="watchlist">Watchlist</button>
     <button class="tab-btn" data-tab="stats">Stats</button>
-    <button class="tab-btn" data-tab="settings">Settings</button>
   </div>
 
   <div class="content">
@@ -305,36 +277,11 @@
       </div>
       <div class="stats-footer">Last 30 days</div>
     </div>
-
-    <!-- Settings tab -->
-    <div class="tab-content" id="tab-settings">
-      <div class="settings-section">
-        <div class="settings-label">Updates</div>
-        <div class="update-card" id="updateCard">
-          <div class="update-row">
-            <div>
-              <div style="font-size:12px;font-weight:700;">Netflix Connect</div>
-              <div class="update-meta" id="updateMeta">Version <b id="localVersion">…</b></div>
-            </div>
-          </div>
-          <button id="updateBtn" class="btn update" disabled>Checking…</button>
-          <label class="update-toggle">
-            <input type="checkbox" id="autoUpdateToggle" checked />
-            Automatically install updates
-          </label>
-        </div>
-      </div>
-      <div class="settings-section">
-        <div class="settings-label">Profile</div>
-        <button id="switchProfileBtn" class="btn">Switch profile</button>
-      </div>
-    </div>
   </div>
 
   <div class="status-toast" id="status"></div>
 
   <script src="js/config.js"></script>
-  <script src="js/updater.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

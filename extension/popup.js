@@ -162,23 +162,18 @@ async function checkNetflixTab() {
 
 // === Tabs ==================================================================
 
-function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.tab === tab);
-  });
-  document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
-  const panel = $(`tab-${tab}`);
-  if (panel) panel.classList.add('active');
-  activeTab = tab;
-  if (activeTab === 'watchlist') loadWatchlist();
-  else if (activeTab === 'stats') loadStats();
-  else if (activeTab === 'settings') refreshUpdater();
-  else refreshState();
-}
-
 function setupTabs() {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+      btn.classList.add('active');
+      $(`tab-${btn.dataset.tab}`).classList.add('active');
+      activeTab = btn.dataset.tab;
+      if (activeTab === 'watchlist') loadWatchlist();
+      else if (activeTab === 'stats') loadStats();
+      else refreshState();
+    });
   });
 }
 
@@ -279,129 +274,6 @@ async function loadStats() {
   }
 }
 
-// === Updater (macOS Native Messaging) ======================================
-
-let updateState = { ready: false, available: false, remoteVersion: null };
-
-function setUpdateUI({ label, detail, disabled, available }) {
-  const btn = $('updateBtn');
-  const meta = $('updateMeta');
-  if (btn) {
-    btn.textContent = label;
-    btn.disabled = !!disabled;
-  }
-  if (typeof available === 'boolean') updateState.available = available;
-  if (detail && meta) meta.innerHTML = detail;
-}
-
-async function refreshUpdater() {
-  const manifest = chrome.runtime.getManifest();
-  const localVersion = manifest.version || '?';
-  $('localVersion').textContent = localVersion;
-
-  setUpdateUI({ label: 'Checking…', disabled: true });
-
-  const status = await ncUpdaterStatus();
-  if (!status.success || status.helperInstalled === false) {
-    const diagnosis = typeof ncDiagnoseHelperError === 'function'
-      ? ncDiagnoseHelperError(status)
-      : (status.error || 'Helper not installed');
-    const id = status.extensionId || chrome.runtime.id || '?';
-    setUpdateUI({
-      label: 'Fix helper',
-      disabled: false,
-      available: false,
-      detail: `Version <b>${localVersion}</b> · ID <code>${id}</code><br>${diagnosis}`,
-    });
-    $('updateBtn').textContent = 'Retry';
-    $('updateBtn').onclick = () => refreshUpdater();
-    return;
-  }
-
-  const check = await ncCheckUpdate();
-  if (!check.success) {
-    setUpdateUI({
-      label: 'Check failed',
-      disabled: false,
-      available: false,
-      detail: `Version <b>${localVersion}</b> · ${check.error || 'Unknown error'}`,
-    });
-    // Allow retry via button
-    $('updateBtn').textContent = 'Retry check';
-    $('updateBtn').onclick = () => refreshUpdater();
-    return;
-  }
-
-  const commitShort = (check.remoteCommit || check.installedCommit || '').slice(0, 7);
-  if (check.changed) {
-    setUpdateUI({
-      label: 'Update',
-      disabled: false,
-      available: true,
-      detail: `Version <b>${localVersion}</b> · Update available${commitShort ? ` (${commitShort})` : ''}`,
-    });
-    $('updateBtn').onclick = () => runUpdate();
-  } else {
-    setUpdateUI({
-      label: 'Check again',
-      disabled: false,
-      available: false,
-      detail: `Version <b>${localVersion}</b> · Up to date${commitShort ? ` · ${commitShort}` : ''}`,
-    });
-    $('updateBtn').onclick = () => refreshUpdater();
-  }
-  updateState.ready = true;
-}
-
-async function runUpdate() {
-  setUpdateUI({ label: 'Updating…', disabled: true });
-  const result = await ncRunUpdate();
-  if (!result.success) {
-    setStatus(result.error || 'Update failed', 'error');
-    setUpdateUI({ label: 'Update', disabled: false, available: true });
-    $('updateBtn').onclick = () => runUpdate();
-    return;
-  }
-  if (!result.changed) {
-    setStatus('Already up to date', 'ok');
-    await refreshUpdater();
-    return;
-  }
-  setUpdateUI({
-    label: 'Reloading…',
-    disabled: true,
-    available: false,
-    detail: `Updated to <b>${result.newVersion || 'latest'}</b> — reloading extension…`,
-  });
-  setStatus(`Updated to ${result.newVersion || 'latest'}`, 'ok');
-  // Give the filesystem a beat; helper now updates files in-place so reload works.
-  setTimeout(() => {
-    try {
-      chrome.runtime.reload();
-    } catch {
-      setUpdateUI({
-        label: 'Reload manually',
-        disabled: false,
-        available: false,
-        detail: 'Files updated. Open chrome://extensions and click Reload on Netflix Connect.',
-      });
-      $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
-    }
-  }, 600);
-}
-
-async function setupUpdaterUI() {
-  const stored = await chrome.storage.sync.get({ autoInstallUpdates: true });
-  const toggle = $('autoUpdateToggle');
-  if (toggle) {
-    toggle.checked = !!stored.autoInstallUpdates;
-    toggle.addEventListener('change', () => {
-      chrome.storage.sync.set({ autoInstallUpdates: toggle.checked });
-    });
-  }
-  await refreshUpdater();
-}
-
 // === Init ==================================================================
 
 async function init() {
@@ -422,8 +294,7 @@ async function init() {
   $('hintText').textContent = `Watching with ${otherUser}`;
 
   setupTabs();
-  $('settingsBtn').addEventListener('click', () => switchTab('settings'));
-  $('switchProfileBtn').addEventListener('click', openSetup);
+  $('settingsBtn').addEventListener('click', openSetup);
   $('invite').addEventListener('click', sendInvite);
   $('accept').addEventListener('click', acceptInvite);
   $('decline').addEventListener('click', declineInvite);
@@ -433,7 +304,6 @@ async function init() {
   checkNetflixTab();
   await refreshState();
   pollTimer = setInterval(refreshState, 4000);
-  setupUpdaterUI();
 }
 
 init();

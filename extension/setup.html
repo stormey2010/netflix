@@ -25,7 +25,8 @@
       justify-content: center;
       padding: 24px;
       position: relative;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
     body::before {
       content: '';
@@ -114,6 +115,54 @@
 
     .hint { color: var(--faint); font-size: 12.5px; margin-top: 44px; }
 
+    .update-panel {
+      margin: 40px auto 0;
+      max-width: 360px;
+      text-align: left;
+      padding: 16px 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+    }
+    .update-panel-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 10px;
+    }
+    .update-title { font-size: 14px; font-weight: 700; color: #fff; }
+    .update-meta { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+    .update-meta b, .update-meta code { color: var(--text); font-weight: 600; }
+    .update-meta code { font-size: 11px; word-break: break-all; }
+    .update-btn {
+      margin-top: 12px;
+      width: 100%;
+      height: 42px;
+      border: none;
+      border-radius: 10px;
+      background: var(--red);
+      color: #fff;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter 0.15s, opacity 0.15s;
+    }
+    .update-btn:hover:not(:disabled) { filter: brightness(1.1); }
+    .update-btn:disabled { opacity: 0.5; cursor: default; }
+    .update-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .update-toggle input { accent-color: var(--red); }
+
     /* Success screen */
     .success { display: none; animation: fadeIn 0.4s ease; }
     .success.visible { display: block; }
@@ -159,6 +208,17 @@
       <div class="question">Who's watching?</div>
       <div class="profiles" id="profiles"></div>
       <p class="hint">You can switch profiles anytime from the extension popup</p>
+
+      <div class="update-panel" id="updateCard">
+        <div class="update-panel-label">Updates</div>
+        <div class="update-title">Netflix Connect</div>
+        <div class="update-meta" id="updateMeta">Version <b id="localVersion">…</b></div>
+        <button id="updateBtn" class="update-btn" disabled>Checking…</button>
+        <label class="update-toggle">
+          <input type="checkbox" id="autoUpdateToggle" checked />
+          Automatically install updates
+        </label>
+      </div>
     </div>
 
     <div class="success" id="success">
@@ -170,6 +230,7 @@
   </div>
 
   <script src="js/config.js"></script>
+  <script src="js/updater.js"></script>
   <script src="setup.js"></script>
 </body>
 </html>
