@@ -9,6 +9,7 @@ const ncTelemetry = {
   tickCallback: null,
 
   async push(extra = {}) {
+    if (typeof ncSession !== 'undefined' && !ncSession.isActive()) return;
     const video = ncGetVideo();
     if (!video) return;
 

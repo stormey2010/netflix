@@ -1,27 +1,22 @@
 /**
  * Netflix Connect - Entry Point
- * Boots all content-script modules in dependency order.
+ * Boots a light realtime listener for invites/session state.
+ * Heavy Netflix page hooks stay off until ncSession.activate().
  */
 
 (() => {
   // Skip sandboxed/child frames to avoid CSP/sandbox errors.
   if (window.top !== window) return;
 
-  console.log('[Netflix Connect] Initializing...');
+  console.log('[Netflix Connect] Idle boot (page hooks off until connected)');
 
   ncTicker.start();
-  ncInjector.init();       // page-bridge (seek hook) + page banner
-  ncNotifications.init();  // toast container + stream handlers
-  ncSync.init();           // video listeners + inbound commands
-  ncShareButton.init();    // detail-modal buttons
-  ncMessages.init();       // popup messaging
+  ncNotifications.init();  // invite toasts only until connected
+  ncMessages.init();
   ncUser.setupChangeListener();
 
   ncUser.load().then(() => {
-    ncStream.start();      // duplex WebSocket with automatic SSE fallback
-    ncTelemetry.start();
-    ncNavigation.init();
-    ncDriftChecker.start();
-    console.log('[Netflix Connect] Ready as', ncUser.current);
+    ncStream.start(); // needed for invite + connection events
+    console.log('[Netflix Connect] Ready as', ncUser.current, '(inactive on page)');
   });
 })();

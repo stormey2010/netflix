@@ -5,6 +5,7 @@
 
 const ncShareButton = {
   injected: false,
+  enabled: false,
   observer: null,
   lastUrlForModal: window.location.href,
   currentNetflixId: null,
@@ -158,6 +159,10 @@ const ncShareButton = {
   },
 
   check() {
+    if (!this.enabled) {
+      this.remove();
+      return;
+    }
     const modal = document.querySelector('[data-uia="modal-motion-container-DETAIL_MODAL"]');
     const hasJbv = new URLSearchParams(window.location.search).has('jbv');
     const hasTitle = window.location.pathname.includes('/title/');
@@ -169,7 +174,17 @@ const ncShareButton = {
     }
   },
 
+  setEnabled(on) {
+    this.enabled = !!on;
+    if (!on) {
+      this.remove();
+      return;
+    }
+    this.check();
+  },
+
   init() {
+    this.enabled = true;
     this.observer = new MutationObserver(() => {
       requestIdleCallback(() => this.check(), { timeout: 100 });
     });
@@ -189,6 +204,7 @@ const ncShareButton = {
     window.addEventListener('popstate', () => setTimeout(() => this.check(), 100));
 
     ncTicker.onFastTick(() => {
+      if (!this.enabled) return;
       if (window.location.href !== this.lastUrlForModal) {
         this.lastUrlForModal = window.location.href;
         this.check();

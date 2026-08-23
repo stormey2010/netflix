@@ -8,8 +8,16 @@ const ncNavigation = {
   lastReportedUrl: null,
   lastUrl: window.location.href,
   urlCheckCallback: null,
+  enabled: false,
+  historyPatched: false,
+
+  setEnabled(on) {
+    this.enabled = !!on;
+    if (!on) this.lastReportedUrl = null;
+  },
 
   async report() {
+    if (!this.enabled) return;
     if (!ncUser.current || ncUser.current === 'unknown') return;
 
     const currentUrl = window.location.href;
@@ -40,6 +48,7 @@ const ncNavigation = {
   },
 
   handleNavEvent(data) {
+    if (!this.enabled) return;
     if (data?.action !== 'navigate' || !data.url) return;
     console.log(`[Netflix Connect] Nav sync: ${data.reason} -> ${data.url}`);
     ncNotifications.showSyncing(data.reason || 'Following your partner...');
@@ -86,6 +95,8 @@ const ncNavigation = {
 
     window.addEventListener('popstate', () => setTimeout(() => this.report(), 100));
 
+    if (this.historyPatched) return;
+    this.historyPatched = true;
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
     const self = this;
@@ -100,6 +111,7 @@ const ncNavigation = {
   },
 
   init() {
+    this.enabled = true;
     this.setupUrlTracking();
     ncStream.on('nav', (data) => this.handleNavEvent(data));
     this.report();

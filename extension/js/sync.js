@@ -13,6 +13,7 @@
 
 const ncSync = {
   isPageUnloading: false,
+  sessionEnabled: false,
   lastKnownTime: 0,
   lastPaused: true,
   lastPlaybackRate: 1.0,
@@ -37,9 +38,26 @@ const ncSync = {
     credits: 'button[data-uia="next-episode-seamless-button-credits"]',
   },
 
+  setEnabled(on) {
+    this.sessionEnabled = !!on;
+    if (!on) {
+      this.holdingForPartnerSegment = false;
+      this.currentSegment = null;
+      if (this.segmentPollId) {
+        clearInterval(this.segmentPollId);
+        this.segmentPollId = null;
+      }
+      try { ncPlayer.cancelSoftSync?.({ restoreRate: true }); } catch {}
+    } else {
+      this.setupSegmentWatcher();
+      this.tryAttachVideoListeners();
+    }
+  },
+
   // === Outbound ===========================================================
 
   async send(command, seconds, extra = {}) {
+    if (!this.sessionEnabled) return;
     const video = ncGetVideo();
     if (!ncUser.current || this.isPageUnloading || !video) return;
     const payload = {
@@ -93,6 +111,7 @@ const ncSync = {
   },
 
   pollSegment() {
+    if (!this.sessionEnabled) return;
     if (ncGetPageType() !== 'watch') {
       if (this.currentSegment) this.onSegmentChange(null);
       return;
@@ -217,12 +236,14 @@ const ncSync = {
 
   setupClickListeners() {
     document.addEventListener('pointerdown', (e) => {
+      if (!this.sessionEnabled) return;
       if (e.target.closest('[role="slider"], [data-uia*="timeline"], [data-uia*="progress"]')) {
         this.markSeekIntent(1600);
       }
     }, true);
 
     document.addEventListener('click', (e) => {
+      if (!this.sessionEnabled) return;
       if (e.target.closest('button[data-uia="control-forward10"]')) {
         this.markSeekIntent();
         ncDebouncedPush.throttledSkip('forward10');
@@ -276,6 +297,7 @@ const ncSync = {
     const ARROWS = new Set(['ArrowLeft', 'Left', 'ArrowRight', 'Right', 'ArrowUp', 'Up', 'ArrowDown', 'Down']);
 
     document.addEventListener('keydown', (e) => {
+      if (!this.sessionEnabled) return;
       if (!ncGetVideo()) return;
       const key = e.key || e.code;
       if (ARROWS.has(key)) {
@@ -308,6 +330,7 @@ const ncSync = {
 
   setupTabVisibility() {
     document.addEventListener('visibilitychange', () => {
+      if (!this.sessionEnabled) return;
       const video = ncGetVideo();
       if (document.hidden) {
         if (video) {
@@ -352,6 +375,7 @@ const ncSync = {
   },
 
   handleCommand(data) {
+    if (!this.sessionEnabled) return;
     if (!this.acceptCommand(data)) return;
     const partner = data.source_user || 'Partner';
     const soft = data.soft !== false; // prefer soft unless explicitly false
@@ -478,6 +502,7 @@ const ncSync = {
   },
 
   init() {
+    this.sessionEnabled = true;
     this.setupClickListeners();
     this.setupKeyboardListeners();
     this.tryAttachVideoListeners();
@@ -534,6 +559,7 @@ const ncDriftChecker = {
   },
 
   async checkBehind() {
+    if (typeof ncSession !== 'undefined' && !ncSession.isActive()) return;
     const data = await this._fetchDrift();
     if (!data || data.status !== 'behind') return;
     if (data.my_paused || data.their_paused) return;
@@ -552,6 +578,7 @@ const ncDriftChecker = {
   },
 
   async checkAhead() {
+    if (typeof ncSession !== 'undefined' && !ncSession.isActive()) return;
     const data = await this._fetchDrift();
     if (!data || data.status !== 'ahead' || data.drift <= NC_CONFIG.DRIFT_THRESHOLD_S) return;
 

@@ -12,13 +12,40 @@ const ncNotifications = {
   pendingAccept: false,
 
   init() {
+    // Styles/container created lazily on first toast. No status badge until connected.
+    ncStream.on('init', (data) => this.handleInit(data));
+    ncStream.on('invite', (data) => this.handleInviteEvent(data));
+  },
+
+  enterConnectedUi(partner) {
+    this.isConnected = true;
+    if (partner) this.partnerName = partner;
     this.injectStyles();
     this.createContainer();
     this.createStatusBadge();
+    this.updateStatusBadge();
+    if (!this._badgeTick) {
+      this._badgeTick = () => this.updateStatusBadge();
+      ncTicker.onFastTick(this._badgeTick);
+    }
+  },
 
-    ncStream.on('init', (data) => this.handleInit(data));
-    ncStream.on('invite', (data) => this.handleInviteEvent(data));
-    ncTicker.onFastTick(() => this.updateStatusBadge());
+  exitConnectedUi() {
+    this.isConnected = false;
+    this.partnerName = null;
+    if (this.statusBadge) {
+      this.statusBadge.remove();
+      this.statusBadge = null;
+    }
+    if (this._badgeTick) {
+      ncTicker.off(this._badgeTick);
+      this._badgeTick = null;
+    }
+  },
+
+  setPartner(partner) {
+    this.partnerName = partner;
+    this.updateStatusBadge();
   },
 
   injectStyles() {
@@ -205,6 +232,7 @@ const ncNotifications = {
   },
 
   show(opts) {
+    this.injectStyles();
     if (!this.container) this.createContainer();
     const {
       type = 'info', title = '', message = '', actions = [],
@@ -280,16 +308,12 @@ const ncNotifications = {
   },
 
   showConnected(partner) {
-    this.isConnected = true;
-    this.partnerName = partner;
-    this.updateStatusBadge();
+    ncSession.activate(partner);
     return this.show({ type: 'connect', title: `Connected with ${partner}`, message: 'Playback is now synced', duration: 3000 });
   },
 
   showDisconnected() {
-    this.isConnected = false;
-    this.partnerName = null;
-    this.updateStatusBadge();
+    ncSession.deactivate();
     return this.show({ type: 'disconnect', title: 'Session ended', duration: 2500 });
   },
 
@@ -361,11 +385,7 @@ const ncNotifications = {
     if (data.invite?.to === me) this.showInviteReceived(data.invite.from);
     if (data.connection?.users) {
       const partner = data.connection.users.find((u) => u !== me);
-      if (partner) {
-        this.isConnected = true;
-        this.partnerName = partner;
-        this.updateStatusBadge();
-      }
+      if (partner) ncSession.activate(partner);
     }
   },
 

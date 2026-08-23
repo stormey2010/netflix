@@ -36,9 +36,18 @@ const ncInjector = {
     }
   },
   
-  // Initialize injector
+  // Initialize injector (only while a session is active)
   init() {
     this.injectSeekHook();
     this.injectPageUi();
-  }
+  },
+
+  /** Remove page-context UI we added; seek bridge is inert without np-seek events. */
+  teardown() {
+    document.querySelectorAll('script[data-np-bridge="ui"]').forEach((s) => s.remove());
+    document.getElementById('netflix-party-connected-message')?.remove();
+    document.documentElement.dispatchEvent(
+      new CustomEvent('nc-session', { detail: { active: false }, bubbles: true })
+    );
+  },
 };
