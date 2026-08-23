@@ -20,6 +20,11 @@ const ncSync = {
   seenEventIds: new Set(),
   lastOutbound: null,
   SEEK_DETECT_THRESHOLD_S: 1.0,
+  seekInProgress: false,
+  seekIntentUntil: 0,
+  seekPlaybackWasPaused: true,
+  resumeOnTabReturn: false,
+  resumeAfterPartnerReturn: false,
 
   // Current Netflix UI segment: null | 'intro' | 'recap'
   currentSegment: null,
@@ -69,6 +74,18 @@ const ncSync = {
     return null;
   },
 
+  markSeekIntent(durationMs = 1200) {
+    const video = ncGetVideo();
+    if (!this.seekInProgress && Date.now() >= this.seekIntentUntil) {
+      this.seekPlaybackWasPaused = video ? video.paused : this.lastPaused;
+    }
+    this.seekIntentUntil = Math.max(this.seekIntentUntil, Date.now() + durationMs);
+  },
+
+  isSeekTransition(video) {
+    return this.seekInProgress || video?.seeking || Date.now() < this.seekIntentUntil;
+  },
+
   setupSegmentWatcher() {
     if (this.segmentPollId) return;
     this.segmentPollId = setInterval(() => this.pollSegment(), NC_CONFIG.SEGMENT_POLL_MS);
@@ -91,13 +108,13 @@ const ncSync = {
     if (!video) return;
 
     if (next) {
-      // We entered intro/recap — tell partner to pause and join us here.
+      // We entered intro/recap — align the partner while preserving play state.
       console.log(`[Netflix Connect] Entered ${next}`);
       this.send('sync_segment', video.currentTime, { segment: next });
       ncTelemetry.push({ action: `segment_${next}`, segment: next, instant: true });
       if (typeof ncNotifications !== 'undefined') {
         ncNotifications.showNote(
-          next === 'intro' ? 'In intro — pausing partner to match' : 'In recap — pausing partner to match',
+          next === 'intro' ? 'In intro — aligning partner' : 'In recap — aligning partner',
           2500
         );
       }
@@ -120,6 +137,7 @@ const ncSync = {
 
     video.addEventListener('play', () => {
       ncTelemetry.push({ action: 'video_play', instant: true });
+      if (this.isSeekTransition(video)) return;
       if (ncPlayer.wasRemote('play')) {
         this.lastPaused = false;
         return;
@@ -132,6 +150,7 @@ const ncSync = {
 
     video.addEventListener('pause', () => {
       ncTelemetry.push({ action: 'video_pause', instant: true });
+      if (this.isSeekTransition(video)) return;
       if (ncPlayer.wasRemote('pause')) {
         this.lastPaused = true;
         return;
@@ -141,7 +160,14 @@ const ncSync = {
       this.lastPaused = true;
     });
 
+    video.addEventListener('seeking', () => {
+      this.markSeekIntent(1200);
+      this.seekInProgress = true;
+    });
+
     video.addEventListener('seeked', () => {
+      this.seekInProgress = false;
+      this.seekIntentUntil = Date.now() + 500;
       ncTelemetry.push({ action: 'video_seeked', instant: true });
       if (ncPlayer.wasRemote('seek')) {
         this.lastKnownTime = video.currentTime;
@@ -150,15 +176,18 @@ const ncSync = {
       const jump = Math.abs(video.currentTime - this.lastKnownTime);
       if (jump > this.SEEK_DETECT_THRESHOLD_S) {
         ncPlayer.cancelSoftSync();
-        this.send('sync_seek', video.currentTime);
+        this.send('sync_seek', video.currentTime, { paused: this.seekPlaybackWasPaused });
       }
       this.lastKnownTime = video.currentTime;
+      setTimeout(() => {
+        if (!this.isSeekTransition(video)) this.lastPaused = video.paused;
+      }, 550);
     });
 
     video.addEventListener('timeupdate', () => {
       const jump = Math.abs(video.currentTime - this.lastKnownTime);
-      if (jump > 2 && !ncPlayer.wasRemote('seek')) {
-        this.send('sync_seek', video.currentTime);
+      if (jump > 2 && !this.seekInProgress && !ncPlayer.wasRemote('seek')) {
+        this.send('sync_seek', video.currentTime, { paused: this.seekPlaybackWasPaused });
       }
       this.lastKnownTime = video.currentTime;
     });
@@ -187,18 +216,27 @@ const ncSync = {
   },
 
   setupClickListeners() {
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[role="slider"], [data-uia*="timeline"], [data-uia*="progress"]')) {
+        this.markSeekIntent(1600);
+      }
+    }, true);
+
     document.addEventListener('click', (e) => {
       if (e.target.closest('button[data-uia="control-forward10"]')) {
+        this.markSeekIntent();
         ncDebouncedPush.throttledSkip('forward10');
         return;
       }
       if (e.target.closest('button[data-uia="control-back10"]')) {
+        this.markSeekIntent();
         ncDebouncedPush.throttledSkip('back10');
         return;
       }
 
       for (const [type, selector] of Object.entries(this.SKIP_SELECTORS)) {
         if (e.target.closest(selector)) {
+          this.markSeekIntent(1800);
           ncDebouncedPush.fast(`click_skip_${type}`);
           // Skip clears our segment; report the post-skip position shortly after.
           this.currentSegment = null;
@@ -241,6 +279,7 @@ const ncSync = {
       if (!ncGetVideo()) return;
       const key = e.key || e.code;
       if (ARROWS.has(key)) {
+        this.markSeekIntent();
         ncDebouncedPush.slow('key_' + key.replace('Arrow', '').toLowerCase());
         return;
       }
@@ -271,13 +310,17 @@ const ncSync = {
     document.addEventListener('visibilitychange', () => {
       const video = ncGetVideo();
       if (document.hidden) {
-        if (video && !video.paused) {
-          ncPlayer.silentPause();
-          this.send('sync_tab_away', video.currentTime);
+        if (video) {
+          this.resumeOnTabReturn = !video.paused;
+          if (this.resumeOnTabReturn) ncPlayer.silentPause();
+          this.send('sync_tab_away', video.currentTime, { resume: this.resumeOnTabReturn });
           ncNotifications.showNote('Video paused (tab hidden)', 2000);
         }
       } else if (video) {
-        this.send('sync_tab_back', video.currentTime);
+        const resume = this.resumeOnTabReturn;
+        this.resumeOnTabReturn = false;
+        if (resume) ncPlayer.remotePlay(video.currentTime);
+        this.send('sync_tab_back', video.currentTime, { resume });
       }
     });
   },
@@ -380,23 +423,19 @@ const ncSync = {
           ncNotifications.showNote(`${label} (synced)`, 2000);
           ncTelemetry.push({ action: `sync_skip_${data.skip_type}_received` });
         }
-        // Resume after skip so both keep watching.
-        ncPlayer.remotePlay(data.seconds);
+        if (data.paused) ncPlayer.remotePause(data.seconds);
+        else ncPlayer.remotePlay(data.seconds);
         break;
 
-      // Partner is in intro/recap and we aren't — pause and join their position.
+      // Match the segment position without creating a one-sided pause.
       case 'sync_segment': {
         const segment = data.segment || 'intro';
-        const locallyInSame = this.detectSegment() === segment;
-        if (locallyInSame) break;
-
-        this.holdingForPartnerSegment = true;
-        ncPlayer.remotePause(data.seconds);
-        // Soft-align if close; otherwise hard seek back into the segment.
-        ncPlayer.remoteSeek(data.seconds, { force: false, moving: false });
+        this.holdingForPartnerSegment = !!data.paused;
+        if (data.paused) ncPlayer.remotePause(data.seconds);
+        else ncPlayer.remotePlay(this.compensatedSeconds(data, true));
         const label = segment === 'intro' ? 'intro' : 'recap';
         ncNotifications.showNote(
-          `${partner} is in the ${label} — paused to match`,
+          `${partner} is in the ${label} — aligned`,
           3500
         );
         ncTelemetry.push({ action: `sync_segment_${segment}_hold`, instant: true });
@@ -404,21 +443,22 @@ const ncSync = {
       }
 
       case 'sync_segment_clear':
-        if (this.holdingForPartnerSegment) {
-          this.holdingForPartnerSegment = false;
-          if (Number.isFinite(data.seconds)) {
-            ncPlayer.remoteSeek(data.seconds, { force: false, moving: true });
-          }
-          ncPlayer.remotePlay(data.seconds);
-          ncNotifications.showNote(`${partner} finished ${data.segment || 'segment'} — resuming`, 2500);
-        }
+        this.holdingForPartnerSegment = false;
+        if (data.paused) ncPlayer.remotePause(data.seconds);
+        else ncPlayer.remotePlay(this.compensatedSeconds(data, true));
+        ncNotifications.showNote(`${partner} finished ${data.segment || 'segment'} — aligned`, 2500);
         break;
 
       case 'sync_tab_away':
+        this.resumeAfterPartnerReturn = !!data.resume && !!ncGetVideo() && !ncGetVideo().paused;
         ncPlayer.silentPause();
         ncNotifications.showNote(`${partner} stepped away`, 3000);
         break;
       case 'sync_tab_back':
+        if (data.resume && this.resumeAfterPartnerReturn) {
+          ncPlayer.remotePlay(this.compensatedSeconds(data, true));
+        }
+        this.resumeAfterPartnerReturn = false;
         ncNotifications.showNote(`${partner} is back!`, 2000);
         break;
       case 'partner_left':

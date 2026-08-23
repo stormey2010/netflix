@@ -14,11 +14,15 @@ const ncNavigation = {
 
     const currentUrl = window.location.href;
     if (currentUrl === this.lastReportedUrl) return;
-    this.lastReportedUrl = currentUrl;
 
     const video = ncGetVideo();
+    if (ncGetPageType() === 'watch' && !video) {
+      setTimeout(() => this.report(), 250);
+      return;
+    }
+    this.lastReportedUrl = currentUrl;
     const positionS = video && Number.isFinite(video.currentTime)
-      ? Math.floor(video.currentTime)
+      ? Math.round(video.currentTime * 1000) / 1000
       : null;
 
     try {
@@ -28,6 +32,7 @@ const ncNavigation = {
         page_type: ncGetPageType(),
         watch_id: ncGetWatchId(),
         position_s: positionS,
+        paused: video ? video.paused : null,
       });
     } catch {
       // Server offline; ignore.
@@ -38,9 +43,35 @@ const ncNavigation = {
     if (data?.action !== 'navigate' || !data.url) return;
     console.log(`[Netflix Connect] Nav sync: ${data.reason} -> ${data.url}`);
     ncNotifications.showSyncing(data.reason || 'Following your partner...');
+    try {
+      sessionStorage.setItem('nc_pending_nav_sync', JSON.stringify({
+        seconds: data.seconds,
+        paused: data.paused,
+        createdAt: Date.now(),
+      }));
+    } catch {}
     setTimeout(() => {
       window.location.href = data.url;
     }, NC_CONFIG.NAV_DELAY_MS);
+  },
+
+  applyPendingSync(attempt = 0) {
+    let pending = null;
+    try { pending = JSON.parse(sessionStorage.getItem('nc_pending_nav_sync') || 'null'); }
+    catch {}
+    if (!pending || Date.now() - pending.createdAt > 30000) {
+      try { sessionStorage.removeItem('nc_pending_nav_sync'); } catch {}
+      return;
+    }
+    const video = ncGetVideo();
+    if (!video || video.readyState < 2) {
+      if (attempt < 40) setTimeout(() => this.applyPendingSync(attempt + 1), 250);
+      return;
+    }
+    try { sessionStorage.removeItem('nc_pending_nav_sync'); } catch {}
+    if (pending.paused) ncPlayer.remotePause(pending.seconds);
+    else ncPlayer.remotePlay(pending.seconds);
+    console.log('[Netflix Connect] Applied playback state after navigation');
   },
 
   checkUrlChange() {
@@ -72,5 +103,6 @@ const ncNavigation = {
     this.setupUrlTracking();
     ncStream.on('nav', (data) => this.handleNavEvent(data));
     this.report();
+    this.applyPendingSync();
   },
 };

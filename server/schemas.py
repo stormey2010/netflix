@@ -54,6 +54,7 @@ class SyncPayload(BaseModel):
     stream_id: str | None = Field(None, description="Client stream generation id")
     seq: int | None = Field(None, description="Monotonic sequence within the stream")
     client_sent_ms: float | None = Field(None, description="Client wall clock when sent")
+    resume: bool | None = Field(None, description="Resume after a temporary away state")
 
 
 class InvitePayload(BaseModel):
@@ -74,6 +75,7 @@ class NavUpdatePayload(BaseModel):
     page_type: str = Field(..., description="watch, browse, search, or other")
     watch_id: str | None = Field(None, description="Video ID if on a watch page")
     position_s: float | None = Field(None, description="Playback position in seconds")
+    paused: bool | None = Field(None, description="Playback state to preserve across navigation")
 
 
 class WatchlistAddPayload(BaseModel):

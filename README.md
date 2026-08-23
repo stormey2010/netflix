@@ -80,7 +80,10 @@ netflix/
 4. Incoming commands are applied through the player controller, which opens a
    short suppression window per action type so applied commands are never
    echoed back (no feedback loops).
-5. Commands carry millisecond positions, monotonic sequence IDs, and timing
+5. Playback state has one authority: explicit media events. Telemetry observes
+   state but never emits play/pause commands, and transient pause/play events
+   produced while seeking are ignored.
+6. Commands carry millisecond positions, monotonic sequence IDs, and timing
    metadata. Receivers discard stale/out-of-order events and compensate a
    playing target for measured network transit time. Drift handling:
    gaps under 10s are resolved by playing the lagging side at 1.25x; gaps of
@@ -117,4 +120,4 @@ Dashboard: <http://localhost:8767/dashboard>
 3. Click "Load unpacked" and select the `extension` folder
 4. Pick your profile on the setup page that opens
 
-<!-- updater smoke test: 0.7.1 -->
+<!-- updater smoke test: 0.7.2 -->

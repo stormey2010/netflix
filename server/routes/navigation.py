@@ -29,34 +29,42 @@ def _sync_partner(payload: NavUpdatePayload, old: dict[str, Any]) -> None:
             partner_nav.get("page_type") == "watch"
             and partner_nav.get("watch_id") == payload.watch_id
         )
+        reason = (
+            f"{payload.user} switched videos"
+            if switched_video
+            else f"{payload.user} started watching"
+        )
         if not already_there:
-            reason = (
-                f"{payload.user} switched videos"
-                if switched_video
-                else f"{payload.user} started watching"
-            )
             bus.publish(
                 "nav",
-                {"action": "navigate", "url": payload.url, "reason": reason},
+                {
+                    "action": "navigate",
+                    "url": payload.url,
+                    "reason": reason,
+                    "seconds": payload.position_s,
+                    "paused": payload.paused,
+                },
                 target_user=partner,
             )
             print(f"[NAV SYNC] Bringing {partner} to {payload.watch_id}")
-
-            if started_watching and payload.position_s is not None:
-                bus.publish(
-                    "command",
-                    {
-                        "command": "sync_seek",
-                        "seconds": int(payload.position_s),
-                        "source_user": payload.user,
-                    },
-                    target_user=partner,
-                )
+        elif payload.position_s is not None:
+            # Partner is still on this title (usually paused because the source
+            # briefly left). Restore both position and playback state.
+            bus.publish(
+                "command",
+                {
+                    "command": "sync_pause" if payload.paused else "sync_play",
+                    "seconds": payload.position_s,
+                    "source_user": payload.user,
+                    "origin": "navigation_return",
+                },
+                target_user=partner,
+            )
 
     elif left_watching and partner_nav.get("page_type") == "watch":
         bus.publish(
             "command",
-            {"command": "sync_pause", "seconds": 0, "source_user": payload.user},
+            {"command": "sync_pause", "source_user": payload.user},
             target_user=partner,
         )
         bus.publish(
@@ -83,6 +91,7 @@ def update_nav(payload: NavUpdatePayload) -> dict[str, Any]:
         "url": payload.url,
         "page_type": payload.page_type,
         "watch_id": payload.watch_id,
+        "paused": payload.paused,
         "updated_at": utcnow().isoformat(),
     }
 

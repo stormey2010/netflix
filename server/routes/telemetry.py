@@ -1,4 +1,4 @@
-"""Telemetry routes - playback state reporting and auto play/pause sync."""
+"""Telemetry routes - playback state observation and drift snapshots."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from auth import require_api_key
 from bus import bus
 from schemas import TelemetryPayload
-from state import partner_of, state, utcnow
+from state import state, utcnow
 
 router = APIRouter(tags=["telemetry"], dependencies=[Depends(require_api_key)])
 
@@ -16,37 +16,6 @@ def _watch_id_from_url(url: str) -> str | None:
     if "/watch/" not in url:
         return None
     return url.split("/watch/")[1].split("?")[0].split("/")[0]
-
-
-def _auto_sync(user: str, new: dict[str, Any], old: dict[str, Any]) -> None:
-    """If both users watch the same title and one changes play/pause state,
-    mirror it to the partner automatically (server-side safety net)."""
-    if not state.is_connected or not new.get("watch_id"):
-        return
-
-    partner = partner_of(user)
-    partner_state = state.playback.get(partner, {})
-    if partner_state.get("watch_id") != new.get("watch_id"):
-        return
-
-    command = None
-    if new["paused"] and not partner_state.get("paused") and old.get("paused") is False:
-        command = "sync_pause"
-    elif not new["paused"] and partner_state.get("paused") and old.get("paused") is True:
-        command = "sync_play"
-
-    if command:
-        bus.publish(
-            "command",
-            {
-                "command": command,
-                "seconds": int(new["position_s"]),
-                "source_user": user,
-                "origin": "auto",
-            },
-            target_user=partner,
-        )
-        print(f"[SYNC AUTO] {user} -> {partner}: {command} @ {int(new['position_s'])}s")
 
 
 @router.post("/telemetry")
@@ -58,7 +27,6 @@ def receive_telemetry(payload: TelemetryPayload) -> dict[str, Any]:
     snapshot["received_at"] = now.isoformat()
     state.telemetry[user] = snapshot
 
-    old = state.playback.get(user, {})
     new = {
         "position_s": payload.position_s,
         "paused": payload.paused,
@@ -68,8 +36,6 @@ def receive_telemetry(payload: TelemetryPayload) -> dict[str, Any]:
         "segment": payload.segment,
     }
     state.playback[user] = new
-
-    _auto_sync(user, new, old)
 
     # Live feed for the dashboard.
     bus.publish(

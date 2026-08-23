@@ -39,7 +39,7 @@ def sync_playback(payload: SyncPayload) -> dict[str, Any]:
         event["segment"] = payload.segment
     if payload.soft is not None:
         event["soft"] = payload.soft
-    for key in ("paused", "rate", "event_id", "stream_id", "seq", "client_sent_ms"):
+    for key in ("paused", "rate", "event_id", "stream_id", "seq", "client_sent_ms", "resume"):
         value = getattr(payload, key)
         if value is not None:
             event[key] = value

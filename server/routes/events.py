@@ -97,7 +97,7 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
                 if key in {
                     "command", "seconds", "playback_rate", "skip_type",
                     "segment", "soft", "paused", "rate", "event_id",
-                    "stream_id", "seq", "client_sent_ms",
+                    "stream_id", "seq", "client_sent_ms", "resume",
                 }
                 and value is not None
             }
