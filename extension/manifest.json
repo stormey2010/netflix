@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Netflix Connect",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Watch Netflix together with smart soft-sync, intro/recap matching, and playback controls.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnAHIQKsKCHTKjk6ZpBI+LECUn8lnO1V0NVs21+acNFP6qXv8/fZpEz+IQXXcGEAH4QvC8F6rJbSgGLWm/MyhbRRpF7kpRQkgWNQ2PilNmtRR2Q2MuPeWxXbtpeMg9LjEzENxDeNYlhkieHYeXbNru9VDjPOVMTzFO9AYZjYFzHL8aDjLCQCkasdGN2zC+3uRLnWINKiL8sYOKf2bghPs2oN2vD+41yIK5PnPPMOWV0Tm/tiIEK6/QZ1eL5Rcxhmq+jhqVODGSeu0TANt7ntG0fzc5OpGriuqmi4nLZP/2mW1uk53/QzO+UwVifKYuAMQzDBYr8xoh+kqcny7IEKu0wIDAQAB",
   "icons": {

@@ -162,18 +162,23 @@ async function checkNetflixTab() {
 
 // === Tabs ==================================================================
 
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+  const panel = $(`tab-${tab}`);
+  if (panel) panel.classList.add('active');
+  activeTab = tab;
+  if (activeTab === 'watchlist') loadWatchlist();
+  else if (activeTab === 'stats') loadStats();
+  else if (activeTab === 'settings') refreshUpdater();
+  else refreshState();
+}
+
 function setupTabs() {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
-      btn.classList.add('active');
-      $(`tab-${btn.dataset.tab}`).classList.add('active');
-      activeTab = btn.dataset.tab;
-      if (activeTab === 'watchlist') loadWatchlist();
-      else if (activeTab === 'stats') loadStats();
-      else refreshState();
-    });
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 }
 
@@ -397,7 +402,8 @@ async function init() {
   $('hintText').textContent = `Watching with ${otherUser}`;
 
   setupTabs();
-  $('settingsBtn').addEventListener('click', openSetup);
+  $('settingsBtn').addEventListener('click', () => switchTab('settings'));
+  $('switchProfileBtn').addEventListener('click', openSetup);
   $('invite').addEventListener('click', sendInvite);
   $('accept').addEventListener('click', acceptInvite);
   $('decline').addEventListener('click', declineInvite);
