@@ -163,25 +163,49 @@ async function runUpdate() {
     return;
   }
 
+  if (!result.diskManifestOK) {
+    setUpdateUI({
+      label: 'Open extensions',
+      disabled: false,
+      detail:
+        'Update finished but the helper could not re-read manifest.json on disk. ' +
+        'Do <b>not</b> reload yet — re-run the installer, or Load unpacked from ' +
+        '<code>~/Library/Application Support/NetflixConnect/extension</code>',
+    });
+    $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
+    return;
+  }
+
+  // Re-read from disk through the helper (not Chrome's in-memory cache).
+  await new Promise((r) => setTimeout(r, 500));
+  const verify = await ncUpdaterStatus();
+  if (!verify.diskManifestOK || !verify.diskManifestVersion) {
+    setUpdateUI({
+      label: 'Open extensions',
+      disabled: false,
+      detail: 'Files may be incomplete on disk. Skip Reload — Load unpacked again from Application Support/NetflixConnect/extension',
+    });
+    $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
+    return;
+  }
+
   setUpdateUI({
-    label: 'Finishing…',
+    label: 'Reloading…',
     disabled: true,
-    detail: `Updated to <b>${result.newVersion || 'latest'}</b> — verifying files…`,
+    detail: `Disk OK at <b>${verify.diskManifestVersion}</b> — reloading…`,
   });
 
-  // Only reload if Chrome can still read this extension's files.
-  await new Promise((r) => setTimeout(r, 400));
-  if (await ncSafeReload()) return;
-
-  setUpdateUI({
-    label: 'Open extensions',
-    disabled: false,
-    detail:
-      'Files were updated, but Chrome needs a manual reload. ' +
-      'Open chrome://extensions → Netflix Connect → Reload. ' +
-      'If it errors, Remove + Load unpacked from ~/Library/Application Support/NetflixConnect/extension',
-  });
-  $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
+  // Last resort if reload bricks: user can Load unpacked again; folder was not deleted.
+  try {
+    chrome.runtime.reload();
+  } catch {
+    setUpdateUI({
+      label: 'Open extensions',
+      disabled: false,
+      detail: `Updated to <b>${verify.diskManifestVersion}</b> on disk. Click Reload on chrome://extensions.`,
+    });
+    $('updateBtn').onclick = () => chrome.tabs.create({ url: 'chrome://extensions' });
+  }
 }
 
 async function setupUpdaterUI() {

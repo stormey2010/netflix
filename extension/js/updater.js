@@ -5,7 +5,7 @@
 
 const NC_NATIVE_HOST = 'xyz.faredrop.netflixconnect.updater';
 const NC_EXPECTED_EXT_ID = 'lajgengnbhhmlgmfnhhjihceohjklkci';
-const NC_MIN_PROTOCOL = 2;
+const NC_MIN_PROTOCOL = 3;
 const NC_UPDATE_ALARM = 'nc-update-check';
 const NC_UPDATE_PERIOD_MINUTES = 360; // 6 hours
 const NC_INSTALLER_URL = 'https://github.com/stormey2010/netflixupdater';
