@@ -21,6 +21,7 @@ if str(_server_dir) not in sys.path:
     sys.path.insert(0, str(_server_dir))
 
 from config import settings
+from bus import bus
 from routes import (
     commands_router,
     dashboard_router,
@@ -140,7 +141,11 @@ for router in (
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "netflix-connect"}
+    return {
+        "status": "ok",
+        "service": "netflix-connect",
+        "realtime_clients": bus.subscriber_count(),
+    }
 
 
 if __name__ == "__main__":

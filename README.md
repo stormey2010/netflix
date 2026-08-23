@@ -8,8 +8,8 @@ relays sync events between them.
 
 - **Playback sync**: play, pause, seek, speed, and skip-intro are mirrored
   between both users in real time
-- **Soft sync**: small drifts (up to ~10s) are corrected by gently nudging the
-  lagging side's playback speed until perfectly aligned - no jarring seeks
+- **Soft sync**: when someone is less than 10s behind, they catch up smoothly
+  at 1.25x; gaps of 10s or more hard-seek to the current position
 - **Navigation sync**: when one user starts watching, the other is brought along
 - **Invites**: connect via an in-page invite with accept/decline
 - **Shared watchlist**: save titles for each other from the Netflix detail modal
@@ -83,8 +83,8 @@ netflix/
 5. Commands carry millisecond positions, monotonic sequence IDs, and timing
    metadata. Receivers discard stale/out-of-order events and compensate a
    playing target for measured network transit time. Drift handling:
-   differences up to ~10s are resolved with a gentle playback
-   rate adjustment on the lagging side (soft sync); larger gaps hard-seek via
+   gaps under 10s are resolved by playing the lagging side at 1.25x; gaps of
+   10s or more hard-seek via
    Netflix's player API through `page-bridge.js`.
 
 ### Authentication
@@ -117,4 +117,4 @@ Dashboard: <http://localhost:8767/dashboard>
 3. Click "Load unpacked" and select the `extension` folder
 4. Pick your profile on the setup page that opens
 
-<!-- updater smoke test: 0.7.0 -->
+<!-- updater smoke test: 0.7.1 -->

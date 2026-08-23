@@ -18,6 +18,7 @@ const ncSync = {
   lastPlaybackRate: 1.0,
   lastSeqByStream: new Map(),
   seenEventIds: new Set(),
+  lastOutbound: null,
   SEEK_DETECT_THRESHOLD_S: 1.0,
 
   // Current Netflix UI segment: null | 'intro' | 'recap'
@@ -44,6 +45,15 @@ const ncSync = {
       rate: video.playbackRate,
       ...extra,
     };
+    const now = Date.now();
+    if (
+      this.lastOutbound?.command === command &&
+      now - this.lastOutbound.at < 300 &&
+      Math.abs(this.lastOutbound.seconds - payload.seconds) < 0.5
+    ) {
+      return;
+    }
+    this.lastOutbound = { command, seconds: payload.seconds, at: now };
     console.log(`[Netflix Connect] Sync out: ${command} @ ${payload.seconds}s`, extra);
     if (ncStream.sendSync(payload)) return;
     try {
@@ -114,8 +124,9 @@ const ncSync = {
         this.lastPaused = false;
         return;
       }
-      if (this.holdingForPartnerSegment) return;
-      if (this.lastPaused) this.send('sync_play', video.currentTime);
+      // A local play is an explicit override of a stale segment hold.
+      this.holdingForPartnerSegment = false;
+      this.send('sync_play', video.currentTime);
       this.lastPaused = false;
     });
 
@@ -126,7 +137,7 @@ const ncSync = {
         return;
       }
       ncPlayer.cancelSoftSync();
-      if (!this.lastPaused) this.send('sync_pause', video.currentTime);
+      this.send('sync_pause', video.currentTime);
       this.lastPaused = true;
     });
 
@@ -208,6 +219,7 @@ const ncSync = {
       for (const [selector, action] of simpleClicks) {
         if (e.target.closest(selector)) {
           ncDebouncedPush.fast(action);
+          if (action === 'click_playpause') this.verifyPlayPauseAfterControl();
           return;
         }
       }
@@ -233,8 +245,26 @@ const ncSync = {
         return;
       }
       const action = KEY_ACTIONS[key];
-      if (action) ncDebouncedPush.fast(action);
+      if (action) {
+        ncDebouncedPush.fast(action);
+        if (action === 'key_space' || action === 'key_enter') {
+          this.verifyPlayPauseAfterControl();
+        }
+      }
     }, true);
+  },
+
+  // Netflix occasionally changes state through its internal player before a
+  // reliable media event reaches the content script. Verify the state after
+  // every play/pause control and relay any transition the media event missed.
+  verifyPlayPauseAfterControl() {
+    setTimeout(() => {
+      const video = ncGetVideo();
+      if (!video || video.paused === this.lastPaused) return;
+      const command = video.paused ? 'sync_pause' : 'sync_play';
+      this.lastPaused = video.paused;
+      this.send(command, video.currentTime);
+    }, 60);
   },
 
   setupTabVisibility() {
@@ -329,7 +359,10 @@ const ncSync = {
         }
         break;
       case 'sync_seek':
-        if (ncPlayer.remoteSeek(this.compensatedSeconds(data, data.paused === false), { force: true })) {
+        if (ncPlayer.remoteSeek(this.compensatedSeconds(data, data.paused === false), {
+          force: false,
+          moving: data.paused === false,
+        })) {
           ncTelemetry.push({ action: 'sync_seek_received' });
         }
         break;

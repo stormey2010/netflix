@@ -16,6 +16,7 @@ QUEUE_MAX = 200
 @dataclass
 class Subscriber:
     queue: asyncio.Queue
+    loop: asyncio.AbstractEventLoop
     channels: set[str] | None = None  # None = all channels
     user: str | None = None  # None = receive events for every user (dashboard)
 
@@ -25,9 +26,21 @@ class EventBus:
     _subscribers: list[Subscriber] = field(default_factory=list)
 
     def subscribe(self, channels: set[str] | None = None, user: str | None = None) -> Subscriber:
-        sub = Subscriber(queue=asyncio.Queue(maxsize=QUEUE_MAX), channels=channels, user=user)
+        sub = Subscriber(
+            queue=asyncio.Queue(maxsize=QUEUE_MAX),
+            loop=asyncio.get_running_loop(),
+            channels=channels,
+            user=user,
+        )
         self._subscribers.append(sub)
         return sub
+
+    @staticmethod
+    def _enqueue(sub: Subscriber, event: dict) -> None:
+        try:
+            sub.queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
 
     def unsubscribe(self, sub: Subscriber) -> None:
         try:
@@ -50,9 +63,12 @@ class EventBus:
             if target_user and sub.user and sub.user != target_user:
                 continue
             try:
-                sub.queue.put_nowait(event)
-            except asyncio.QueueFull:
-                pass  # Slow consumer; drop rather than block the publisher.
+                # publish() is also called by FastAPI's synchronous routes,
+                # which run in worker threads. Always marshal queue writes to
+                # the subscriber's owning event loop so it wakes immediately.
+                sub.loop.call_soon_threadsafe(self._enqueue, sub, event)
+            except RuntimeError:
+                pass  # Subscriber loop closed during disconnect.
 
     def subscriber_count(self) -> int:
         return len(self._subscribers)

@@ -42,16 +42,16 @@ const NC_CONFIG = {
   DRIFT_CHECK_INTERVAL_MS: 120000, // prompt when far ahead
   CATCHUP_CHECK_INTERVAL_MS: 8000, // auto soft catch-up when behind
   DRIFT_THRESHOLD_S: 5,
-  SEEK_APPLY_THRESHOLD_S: 2,   // ignore remote seeks closer than this
-  REMOTE_SUPPRESS_MS: 1500,    // echo-suppression window after remote actions
+  SEEK_APPLY_THRESHOLD_S: 0.12,
+  REMOTE_SUPPRESS_MS: 350,     // play/pause/rate echo suppression
+  REMOTE_SEEK_SUPPRESS_MS: 1500,
 
   // Soft sync: for small drifts, nudge playback rate instead of hard seeking
   SOFT_SYNC_MAX_S: 10,         // drifts up to this get rate-nudged, beyond = hard seek
-  SOFT_SYNC_MIN_S: 0.75,       // drifts below this are considered in sync already
-  SOFT_SYNC_DONE_S: 0.2,       // stop nudging once within this of the target
+  SOFT_SYNC_MIN_S: 0.25,       // drifts below this are considered in sync already
+  SOFT_SYNC_DONE_S: 0.1,       // stop nudging once within this of the target
   SOFT_SYNC_TICK_MS: 250,      // how often to re-evaluate while nudging
-  SOFT_SYNC_MAX_ADJUST: 0.4,   // max playback-rate delta (+/-) while nudging
-  SOFT_SYNC_BEHIND_BOOST: 0.12,// extra rate boost when catching up from behind
+  SOFT_SYNC_CATCHUP_RATE: 1.25,// fixed smooth catch-up speed when behind
   SOFT_SYNC_TIMEOUT_MS: 60000, // give up nudging after this long
 
   // Intro / recap segment detection

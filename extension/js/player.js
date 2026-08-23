@@ -11,15 +11,17 @@
  *
  * Small drifts (<= SOFT_SYNC_MAX_S) are corrected with a gentle playback-rate
  * nudge ("soft sync") instead of a jarring hard seek: whoever is behind plays
- * slightly faster (or slightly slower if ahead) until perfectly aligned, then
- * the original speed is restored.
+ * at 1.25x until aligned. A client that is ahead seeks back immediately.
  */
 
 const ncPlayer = {
   _suppressedUntil: { play: 0, pause: 0, seek: 0, rate: 0 },
 
   _mark(kind) {
-    this._suppressedUntil[kind] = Date.now() + NC_CONFIG.REMOTE_SUPPRESS_MS;
+    const duration = kind === 'seek'
+      ? NC_CONFIG.REMOTE_SEEK_SUPPRESS_MS
+      : NC_CONFIG.REMOTE_SUPPRESS_MS;
+    this._suppressedUntil[kind] = Date.now() + duration;
   },
 
   // True if an event of this kind was likely caused by a remote action we
@@ -83,10 +85,9 @@ const ncPlayer = {
     s.moving = moving;
     s.startedAt = Date.now();
 
-    const behind = this._softTarget() > v.currentTime;
-    console.log(`[Netflix Connect] Soft sync started (${behind ? 'speeding up' : 'slowing down'})`);
+    console.log(`[Netflix Connect] Catch-up started at ${NC_CONFIG.SOFT_SYNC_CATCHUP_RATE}x`);
     if (typeof ncNotifications !== 'undefined') {
-      ncNotifications.showNote(behind ? 'Catching up to partner…' : 'Easing back to partner…', 2000);
+      ncNotifications.showNote(`Catching up at ${NC_CONFIG.SOFT_SYNC_CATCHUP_RATE}x…`, 2000);
     }
 
     s.timer = setInterval(() => this._softSyncTick(), NC_CONFIG.SOFT_SYNC_TICK_MS);
@@ -106,7 +107,7 @@ const ncPlayer = {
 
     const drift = this._softTarget() - v.currentTime; // positive = we're behind
 
-    if (Math.abs(drift) <= NC_CONFIG.SOFT_SYNC_DONE_S) {
+    if (drift <= NC_CONFIG.SOFT_SYNC_DONE_S) {
       this.cancelSoftSync();
       if (typeof ncNotifications !== 'undefined') {
         ncNotifications.showNote('In sync with partner', 1500);
@@ -115,25 +116,14 @@ const ncPlayer = {
     }
 
     // If the gap grew past the soft window (buffering, user seek), hard seek.
-    if (Math.abs(drift) > NC_CONFIG.SOFT_SYNC_MAX_S + 2) {
+    if (drift > NC_CONFIG.SOFT_SYNC_MAX_S) {
       const target = this._softTarget();
       this.cancelSoftSync();
       this._hardSeek(target);
       return;
     }
 
-    // Gentle proportional adjustment. When behind, add a small boost so
-    // catch-up is noticeable without sounding weird.
-    let magnitude = Math.min(
-      NC_CONFIG.SOFT_SYNC_MAX_ADJUST,
-      Math.max(0.08, Math.abs(drift) / 12)
-    );
-    if (drift > 0) magnitude = Math.min(
-      NC_CONFIG.SOFT_SYNC_MAX_ADJUST,
-      magnitude + (NC_CONFIG.SOFT_SYNC_BEHIND_BOOST || 0)
-    );
-    const adjust = Math.sign(drift) * magnitude;
-    const rate = Math.max(0.5, Math.min(2.0, s.baseRate + adjust));
+    const rate = NC_CONFIG.SOFT_SYNC_CATCHUP_RATE;
     if (v.playbackRate !== rate) {
       this._mark('rate');
       v.playbackRate = rate;
@@ -178,10 +168,10 @@ const ncPlayer = {
       return 'seek';
     }
 
-    const drift = Math.abs(v.currentTime - seconds);
-    if (drift <= NC_CONFIG.SOFT_SYNC_MIN_S) return false;
+    const drift = seconds - v.currentTime; // positive means this client is behind
+    if (Math.abs(drift) <= NC_CONFIG.SOFT_SYNC_MIN_S) return false;
 
-    if (drift <= NC_CONFIG.SOFT_SYNC_MAX_S && !v.paused) {
+    if (drift > 0 && drift < NC_CONFIG.SOFT_SYNC_MAX_S && !v.paused && moving) {
       return this._startSoftSync(seconds, { moving }) ? 'soft' : false;
     }
 
@@ -195,11 +185,13 @@ const ncPlayer = {
   remotePlay(seconds = null) {
     const v = this.video();
     if (!v || !this.isReady()) return false;
-    if (seconds !== null && Math.abs(v.currentTime - seconds) > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) {
+    if (seconds !== null && seconds - v.currentTime >= NC_CONFIG.SOFT_SYNC_MAX_S) {
       this.syncTo(seconds, { force: true, moving: true });
     }
     this._mark('play');
-    v.play().catch(() => {});
+    v.play().then(() => {
+      if (seconds !== null) this.syncTo(seconds, { force: false, moving: true });
+    }).catch(() => {});
     return true;
   },
 
