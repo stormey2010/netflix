@@ -21,6 +21,34 @@ def _estimated_position(playback: dict[str, Any], now) -> float:
     return playback["position_s"] + elapsed
 
 
+def apply_sync_to_playback(
+    source_user: str,
+    command: str,
+    seconds: float | None = None,
+    *,
+    paused: bool | None = None,
+    rate: float | None = None,
+) -> None:
+    """Keep drift state fresh from sync events (not only slow telemetry)."""
+    now = utcnow()
+    pb = dict(state.playback.get(source_user) or {})
+    if command in ("sync_pause", "pause"):
+        pb["paused"] = True
+    elif command in ("sync_play", "play"):
+        pb["paused"] = False
+    elif paused is not None:
+        pb["paused"] = bool(paused)
+    if seconds is not None:
+        try:
+            pb["position_s"] = float(seconds)
+        except (TypeError, ValueError):
+            pass
+    if rate is not None:
+        pb["rate"] = rate
+    pb["server_time"] = now
+    state.playback[source_user] = pb
+
+
 @router.post("/sync")
 def sync_playback(payload: SyncPayload) -> dict[str, Any]:
     """Relay a sync event (play/pause/seek/speed/skip/segment/tab) to the partner."""
@@ -45,6 +73,14 @@ def sync_playback(payload: SyncPayload) -> dict[str, Any]:
             event[key] = value
     event["server_received_ms"] = utcnow().timestamp() * 1000
     event["transport"] = "http"
+
+    apply_sync_to_playback(
+        payload.source_user,
+        payload.command,
+        payload.seconds,
+        paused=payload.paused,
+        rate=payload.rate,
+    )
 
     print(f"[SYNC] {payload.source_user} -> {target}: {payload.command} @ {payload.seconds:.1f}s")
     bus.publish("command", event, target_user=target)

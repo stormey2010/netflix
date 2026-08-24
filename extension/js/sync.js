@@ -78,7 +78,12 @@ const ncSync = {
     }
     this.lastOutbound = { command, seconds: payload.seconds, at: now };
     console.log(`[Netflix Connect] Sync out: ${command} @ ${payload.seconds}s`, extra);
-    if (ncStream.sendSync(payload)) return;
+
+    // Play/pause must be reliable — send over WebSocket AND HTTP so a dropped
+    // WS frame cannot leave the partner playing.
+    const critical = command === 'sync_play' || command === 'sync_pause';
+    const viaWs = ncStream.sendSync(payload);
+    if (viaWs && !critical) return;
     try {
       await ncPost(NC_CONFIG.ENDPOINTS.SYNC, payload);
     } catch {
@@ -155,21 +160,22 @@ const ncSync = {
     this.lastPlaybackRate = video.playbackRate;
 
     video.addEventListener('play', () => {
+      if (!this.sessionEnabled) return;
       ncTelemetry.push({ action: 'video_play', instant: true });
-      if (this.isSeekTransition(video)) return;
       if (ncPlayer.wasRemote('play')) {
         this.lastPaused = false;
         return;
       }
-      // A local play is an explicit override of a stale segment hold.
+      // Always broadcast — do not drop during seek transitions (Netflix often
+      // pauses/plays around seeks and we were swallowing the real user action).
       this.holdingForPartnerSegment = false;
       this.send('sync_play', video.currentTime);
       this.lastPaused = false;
     });
 
     video.addEventListener('pause', () => {
+      if (!this.sessionEnabled) return;
       ncTelemetry.push({ action: 'video_pause', instant: true });
-      if (this.isSeekTransition(video)) return;
       if (ncPlayer.wasRemote('pause')) {
         this.lastPaused = true;
         return;
@@ -319,13 +325,18 @@ const ncSync = {
   // reliable media event reaches the content script. Verify the state after
   // every play/pause control and relay any transition the media event missed.
   verifyPlayPauseAfterControl() {
-    setTimeout(() => {
+    const check = () => {
+      if (!this.sessionEnabled) return;
       const video = ncGetVideo();
       if (!video || video.paused === this.lastPaused) return;
       const command = video.paused ? 'sync_pause' : 'sync_play';
       this.lastPaused = video.paused;
+      if (video.paused) ncPlayer.cancelSoftSync();
       this.send(command, video.currentTime);
-    }, 60);
+    };
+    // Netflix often flips state a few frames after the click.
+    setTimeout(check, 40);
+    setTimeout(check, 160);
   },
 
   setupTabVisibility() {
@@ -351,6 +362,9 @@ const ncSync = {
   // === Inbound ============================================================
 
   acceptCommand(data) {
+    if (data.source_user && ncUser.current && data.source_user === ncUser.current) {
+      return false;
+    }
     if (data.event_id) {
       if (this.seenEventIds.has(data.event_id)) return false;
       this.seenEventIds.add(data.event_id);
@@ -363,6 +377,10 @@ const ncSync = {
       if (data.seq <= previous) return false;
       this.lastSeqByStream.set(data.stream_id, data.seq);
     }
+    const critical = data.command === 'sync_play' || data.command === 'sync_pause'
+      || data.command === 'play' || data.command === 'pause';
+    // Never drop play/pause as "stale" — clock skew was eating them.
+    if (critical) return true;
     const age = ncStream.estimatedEventAgeMs(data);
     return age <= NC_CONFIG.COMMAND_STALE_MS;
   },
@@ -417,12 +435,14 @@ const ncSync = {
       case 'sync_play':
         this.holdingForPartnerSegment = false;
         if (ncPlayer.remotePlay(this.compensatedSeconds(data, true))) {
-          ncTelemetry.push({ action: 'sync_play_received' });
+          ncNotifications.showNote(`${partner} played`, 1200);
+          ncTelemetry.push({ action: 'sync_play_received', instant: true });
         }
         break;
       case 'sync_pause':
         if (ncPlayer.remotePause(this.compensatedSeconds(data, false))) {
-          ncTelemetry.push({ action: 'sync_pause_received' });
+          ncNotifications.showNote(`${partner} paused`, 1200);
+          ncTelemetry.push({ action: 'sync_pause_received', instant: true });
         }
         break;
       case 'sync_seek':
@@ -562,6 +582,8 @@ const ncDriftChecker = {
     if (typeof ncSession !== 'undefined' && !ncSession.isActive()) return;
     const data = await this._fetchDrift();
     if (!data || data.status !== 'behind') return;
+    // Never auto-catch-up while either side is paused — that was overriding
+    // a partner's intentional pause.
     if (data.my_paused || data.their_paused) return;
     if (ncSync.holdingForPartnerSegment || ncSync.currentSegment) return;
 

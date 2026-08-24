@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from auth import require_api_key
 from bus import bus, sse_generator
 from state import partner_of, state, validate_user
+from routes.sync import apply_sync_to_playback
 
 router = APIRouter(tags=["events"], dependencies=[Depends(require_api_key)])
 
@@ -106,6 +107,14 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
                 "server_received_ms": time.time() * 1000,
                 "transport": "websocket",
             })
+            apply_sync_to_playback(
+                user,
+                command,
+                float(seconds),
+                paused=event.get("paused"),
+                rate=event.get("rate"),
+            )
+            print(f"[SYNC/WS] {user} -> {partner_of(user)}: {command} @ {float(seconds):.1f}s")
             bus.publish("command", event, target_user=partner_of(user))
 
     sender = asyncio.create_task(send_events())

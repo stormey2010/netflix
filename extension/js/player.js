@@ -184,25 +184,45 @@ const ncPlayer = {
 
   remotePlay(seconds = null) {
     const v = this.video();
-    if (!v || !this.isReady()) return false;
-    if (seconds !== null && seconds - v.currentTime >= NC_CONFIG.SOFT_SYNC_MAX_S) {
+    if (!v) return false;
+    this.cancelSoftSync({ restoreRate: true });
+    if (seconds !== null && this.isReady() && seconds - v.currentTime >= NC_CONFIG.SOFT_SYNC_MAX_S) {
       this.syncTo(seconds, { force: true, moving: true });
     }
     this._mark('play');
-    v.play().then(() => {
-      if (seconds !== null) this.syncTo(seconds, { force: false, moving: true });
-    }).catch(() => {});
+    const tryPlay = () => {
+      v.play().then(() => {
+        if (seconds !== null && this.isReady()) {
+          this.syncTo(seconds, { force: false, moving: true });
+        }
+      }).catch(() => {});
+    };
+    tryPlay();
+    // Netflix sometimes ignores the first play() while the player is settling.
+    setTimeout(() => {
+      if (v.paused && this.wasRemote('play')) tryPlay();
+    }, 120);
     return true;
   },
 
   remotePause(seconds = null) {
     const v = this.video();
-    if (!v || !this.isReady()) return false;
+    if (!v) return false;
     this.cancelSoftSync({ restoreRate: true });
     this._mark('pause');
-    v.pause();
-    // Can't rate-nudge while paused; hard-align if meaningfully off.
-    if (seconds !== null && seconds >= 0) {
+    const forcePause = () => {
+      try { v.pause(); } catch {}
+    };
+    forcePause();
+    // Don't require readyState — pause must work even while buffering.
+    // Netflix occasionally resumes after an external pause; nudge twice.
+    setTimeout(() => {
+      if (v && !v.paused && this.wasRemote('pause')) forcePause();
+    }, 50);
+    setTimeout(() => {
+      if (v && !v.paused && this.wasRemote('pause')) forcePause();
+    }, 200);
+    if (seconds !== null && seconds >= 0 && this.isReady()) {
       const drift = Math.abs(v.currentTime - seconds);
       if (drift > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) this._hardSeek(seconds);
     }
