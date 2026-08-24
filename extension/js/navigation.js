@@ -74,7 +74,16 @@ const ncNavigation = {
     }
     const video = ncGetVideo();
     if (!video || video.readyState < 2) {
-      if (attempt < 40) setTimeout(() => this.applyPendingSync(attempt + 1), 250);
+      // Apply pause immediately even while buffering; retry seek/play when ready.
+      if (pending.paused && video) {
+        try { ncPlayer.remotePause(pending.seconds); } catch {}
+      }
+      if (attempt < 80) {
+        if (video && attempt === 0) {
+          video.addEventListener('canplay', () => this.applyPendingSync(1), { once: true });
+        }
+        setTimeout(() => this.applyPendingSync(attempt + 1), 250);
+      }
       return;
     }
     try { sessionStorage.removeItem('nc_pending_nav_sync'); } catch {}
@@ -87,6 +96,10 @@ const ncNavigation = {
     if (window.location.href === this.lastUrl) return;
     this.lastUrl = window.location.href;
     this.report();
+    // Netflix replaces <video> on SPA navigations — rebind outbound listeners.
+    if (typeof ncSync !== 'undefined' && ncSync.sessionEnabled) {
+      ncSync.tryAttachVideoListeners();
+    }
   },
 
   setupUrlTracking() {

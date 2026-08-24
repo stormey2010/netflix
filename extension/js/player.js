@@ -16,12 +16,22 @@
 
 const ncPlayer = {
   _suppressedUntil: { play: 0, pause: 0, seek: 0, rate: 0 },
+  _pending: null,
 
   _mark(kind) {
     const duration = kind === 'seek'
       ? NC_CONFIG.REMOTE_SEEK_SUPPRESS_MS
       : NC_CONFIG.REMOTE_SUPPRESS_MS;
     this._suppressedUntil[kind] = Date.now() + duration;
+  },
+
+  // Suppress every action kind so Netflix's internal pause/play around a
+  // remote seek cannot bounce back to the partner.
+  _markAll(ms = NC_CONFIG.REMOTE_SUPPRESS_MS) {
+    const until = Date.now() + ms;
+    for (const k of Object.keys(this._suppressedUntil)) {
+      this._suppressedUntil[k] = Math.max(this._suppressedUntil[k] || 0, until);
+    }
   },
 
   // True if an event of this kind was likely caused by a remote action we
@@ -39,13 +49,34 @@ const ncPlayer = {
     return !!v && v.readyState >= 2;
   },
 
+  _queuePending(seconds, opts) {
+    this._pending = { seconds, opts, at: Date.now() };
+    const v = this.video();
+    if (!v) return;
+    const flush = () => this._flushPending();
+    v.addEventListener('canplay', flush, { once: true });
+    v.addEventListener('loadeddata', flush, { once: true });
+  },
+
+  _flushPending() {
+    const p = this._pending;
+    if (!p) return;
+    if (Date.now() - p.at > 15000) {
+      this._pending = null;
+      return;
+    }
+    if (!this.isReady()) return;
+    this._pending = null;
+    this.syncTo(p.seconds, p.opts);
+  },
+
   // Raw seek through the Netflix player API (page context).
   _dispatchSeek(seconds) {
     window.dispatchEvent(new CustomEvent('np-seek', { detail: { ms: Number(seconds) * 1000 } }));
   },
 
   _hardSeek(seconds) {
-    this._mark('seek');
+    this._markAll(NC_CONFIG.REMOTE_SEEK_SUPPRESS_MS);
     this._dispatchSeek(seconds);
   },
 
@@ -105,6 +136,17 @@ const ncPlayer = {
       return;
     }
 
+    // Freeze the moving target while buffering/seeking so the gap does not
+    // inflate into a hard-seek jump.
+    if (v.readyState < 2 || v.seeking) {
+      if (s.moving) {
+        const target = this._softTarget();
+        s.anchorPos = target;
+        s.anchorAt = Date.now();
+      }
+      return;
+    }
+
     const drift = this._softTarget() - v.currentTime; // positive = we're behind
 
     if (drift <= NC_CONFIG.SOFT_SYNC_DONE_S) {
@@ -115,7 +157,7 @@ const ncPlayer = {
       return;
     }
 
-    // If the gap grew past the soft window (buffering, user seek), hard seek.
+    // If the gap grew past the soft window (user seek), hard seek.
     if (drift > NC_CONFIG.SOFT_SYNC_MAX_S) {
       const target = this._softTarget();
       this.cancelSoftSync();
@@ -156,11 +198,15 @@ const ncPlayer = {
    * - tiny drift: do nothing
    * - small drift while playing: soft sync (rate nudge)
    * - large drift, paused, or force: hard seek
-   * Returns 'soft', 'seek', or false if no correction was needed/possible.
+   * Returns 'soft', 'seek', 'queued', or false if no correction was needed/possible.
    */
   syncTo(seconds, { force = false, moving = true } = {}) {
     const v = this.video();
-    if (!v || !this.isReady() || !Number.isFinite(seconds)) return false;
+    if (!v || !Number.isFinite(seconds)) return false;
+    if (!this.isReady()) {
+      this._queuePending(seconds, { force, moving });
+      return 'queued';
+    }
 
     if (force) {
       this.cancelSoftSync({ restoreRate: true });
@@ -186,8 +232,11 @@ const ncPlayer = {
     const v = this.video();
     if (!v) return false;
     this.cancelSoftSync({ restoreRate: true });
+    this._markAll(NC_CONFIG.REMOTE_SUPPRESS_MS);
     if (seconds !== null && this.isReady() && seconds - v.currentTime >= NC_CONFIG.SOFT_SYNC_MAX_S) {
       this.syncTo(seconds, { force: true, moving: true });
+    } else if (seconds !== null && !this.isReady()) {
+      this._queuePending(seconds, { force: false, moving: true });
     }
     this._mark('play');
     const tryPlay = () => {
@@ -209,6 +258,7 @@ const ncPlayer = {
     const v = this.video();
     if (!v) return false;
     this.cancelSoftSync({ restoreRate: true });
+    this._markAll(NC_CONFIG.REMOTE_SUPPRESS_MS);
     this._mark('pause');
     const forcePause = () => {
       try { v.pause(); } catch {}
@@ -222,9 +272,13 @@ const ncPlayer = {
     setTimeout(() => {
       if (v && !v.paused && this.wasRemote('pause')) forcePause();
     }, 200);
-    if (seconds !== null && seconds >= 0 && this.isReady()) {
-      const drift = Math.abs(v.currentTime - seconds);
-      if (drift > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) this._hardSeek(seconds);
+    if (seconds !== null && seconds >= 0) {
+      if (this.isReady()) {
+        const drift = Math.abs(v.currentTime - seconds);
+        if (drift > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) this._hardSeek(seconds);
+      } else {
+        this._queuePending(seconds, { force: true, moving: false });
+      }
     }
     return true;
   },

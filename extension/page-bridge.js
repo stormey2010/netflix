@@ -8,7 +8,13 @@
       const vp = api?.videoPlayer;
       const ids = vp?.getAllPlayerSessionIds?.();
       if (!ids || !ids.length) return null;
-      return vp.getVideoPlayerBySessionId(ids[0]);
+      // Prefer the newest session (SPA remount / next episode); fall back
+      // through older ids if the newest is already gone.
+      for (let i = ids.length - 1; i >= 0; i--) {
+        const player = vp.getVideoPlayerBySessionId(ids[i]);
+        if (player) return player;
+      }
+      return null;
     } catch (_) {
       return null;
     }

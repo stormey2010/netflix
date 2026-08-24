@@ -42,7 +42,11 @@ const ncStream = {
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(url.toString());
     this.ws = ws;
-    this.fallbackTimer = setTimeout(() => this._startSSE(), NC_CONFIG.WS_FALLBACK_DELAY_MS);
+    // Only fall back to SSE if WS has not opened — never run both live.
+    this.fallbackTimer = setTimeout(() => {
+      if (this.stopped || this.ws?.readyState === WebSocket.OPEN) return;
+      this._startSSE();
+    }, NC_CONFIG.WS_FALLBACK_DELAY_MS);
 
     ws.onopen = () => {
       if (this.ws !== ws || this.stopped) return;
@@ -109,23 +113,36 @@ const ncStream = {
     this.serverOffsetMs = firstSample ? offset : this.serverOffsetMs * 0.75 + offset * 0.25;
   },
 
-  sendSync(payload) {
-    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+  /** Mint a shared envelope so WS + HTTP use the same event_id for dedupe. */
+  wrapSync(payload) {
     this.seq += 1;
-    this.ws.send(JSON.stringify({
-      type: 'sync', ...payload,
+    return {
+      ...payload,
       event_id: `${this.streamId}:${this.seq}`,
       stream_id: this.streamId,
       seq: this.seq,
       client_sent_ms: Date.now(),
-    }));
+    };
+  },
+
+  sendSync(payload) {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    const envelope = payload.event_id ? payload : this.wrapSync(payload);
+    this.ws.send(JSON.stringify({ type: 'sync', ...envelope }));
     return true;
   },
 
   estimatedEventAgeMs(data) {
     const received = Number(data.server_received_ms);
-    if (!Number.isFinite(received)) return 0;
-    return Math.max(0, Date.now() + this.serverOffsetMs - received);
+    if (Number.isFinite(received) && this.rttMs !== null) {
+      return Math.max(0, Date.now() + this.serverOffsetMs - received);
+    }
+    const sent = Number(data.client_sent_ms);
+    if (Number.isFinite(sent)) return Math.max(0, Date.now() - sent);
+    if (Number.isFinite(received)) {
+      return Math.max(0, Date.now() + this.serverOffsetMs - received);
+    }
+    return 0;
   },
 
   stop() {

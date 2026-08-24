@@ -45,6 +45,13 @@ def apply_sync_to_playback(
             pass
     if rate is not None:
         pb["rate"] = rate
+    # Prefer nav watch_id so drift works before the next telemetry tick.
+    if not pb.get("watch_id"):
+        nav = state.nav.get(source_user) or {}
+        if nav.get("watch_id"):
+            pb["watch_id"] = nav["watch_id"]
+            if nav.get("url"):
+                pb["url"] = nav["url"]
     pb["server_time"] = now
     state.playback[source_user] = pb
 
@@ -122,11 +129,11 @@ def check_drift(user: str) -> dict[str, Any]:
 
     if drift > DRIFT_NOTIFY_THRESHOLD_S:
         response["status"] = "ahead"
-        response["sync_to"] = int(their_pos)
+        response["sync_to"] = round(their_pos, 3)
     elif drift < -0.75:
         # Negative drift = we're behind; soft catch-up if within the soft window.
         response["status"] = "behind"
-        response["sync_to"] = int(their_pos)
+        response["sync_to"] = round(their_pos, 3)
         response["soft"] = abs(drift) <= SOFT_SYNC_MAX_S
     elif mine.get("paused") or theirs.get("paused"):
         response["status"] = "paused"
@@ -167,7 +174,7 @@ def align_playback() -> dict[str, Any]:
         leader_paused = pb.get("paused", False)
 
     soft = gap <= SOFT_SYNC_MAX_S
-    seconds = int(leader_pos)
+    seconds = round(leader_pos, 3)
 
     # Align the follower to the leader.
     bus.publish(

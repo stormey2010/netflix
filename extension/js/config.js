@@ -40,10 +40,10 @@ const NC_CONFIG = {
   THROTTLE_MS: 300,
   NAV_DELAY_MS: 500,
   DRIFT_CHECK_INTERVAL_MS: 120000, // prompt when far ahead
-  CATCHUP_CHECK_INTERVAL_MS: 8000, // auto soft catch-up when behind
+  CATCHUP_CHECK_INTERVAL_MS: 2000, // auto soft catch-up when behind
   DRIFT_THRESHOLD_S: 5,
   SEEK_APPLY_THRESHOLD_S: 0.12,
-  REMOTE_SUPPRESS_MS: 350,     // play/pause/rate echo suppression
+  REMOTE_SUPPRESS_MS: 800,     // play/pause/rate echo suppression
   REMOTE_SEEK_SUPPRESS_MS: 1500,
 
   // Soft sync: for small drifts, nudge playback rate instead of hard seeking
@@ -55,12 +55,12 @@ const NC_CONFIG = {
   SOFT_SYNC_TIMEOUT_MS: 60000, // give up nudging after this long
 
   // Intro / recap segment detection
-  SEGMENT_POLL_MS: 1000,
+  SEGMENT_POLL_MS: 400,
 
   // SSE retry backoff
   INITIAL_RETRY_MS: 500,
   MAX_RETRY_MS: 5000,
-  WS_FALLBACK_DELAY_MS: 700,
+  WS_FALLBACK_DELAY_MS: 1200,
   WS_PING_INTERVAL_MS: 10000,
   COMMAND_STALE_MS: 5000,
   EXACT_SYNC_THRESHOLD_S: 0.12,

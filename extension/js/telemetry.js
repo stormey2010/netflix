@@ -21,7 +21,10 @@ const ncTelemetry = {
       id: p.sourceId || 'unknown',
       url: p.sourceUrl || window.location?.href || '',
       rate: p.playbackRate ?? 1,
-      paused: !ncIsPlaying(video),
+      // Use the real paused flag — treating buffering as paused made drift
+      // think the partner was paused and broke catch-up / pause sync.
+      paused: !!video.paused,
+      buffering: !video.paused && video.readyState < 2,
       position_s: Number.isFinite(p.currentTimeS) ? p.currentTimeS : 0,
       duration_s: Number.isFinite(p.durationS) ? p.durationS : null,
       ready_state: p.readyState ?? -1,

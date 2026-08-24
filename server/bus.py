@@ -40,7 +40,15 @@ class EventBus:
         try:
             sub.queue.put_nowait(event)
         except asyncio.QueueFull:
-            pass
+            # Drop oldest so a burst of dual-transport sync cannot lose pause/play.
+            try:
+                sub.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                sub.queue.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
 
     def unsubscribe(self, sub: Subscriber) -> None:
         try:

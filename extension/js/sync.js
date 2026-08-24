@@ -20,6 +20,10 @@ const ncSync = {
   lastSeqByStream: new Map(),
   seenEventIds: new Set(),
   lastOutbound: null,
+  _lastCriticalKey: null,
+  _lastCriticalAt: 0,
+  _attachedVideo: null,
+  _videoObserver: null,
   SEEK_DETECT_THRESHOLD_S: 1.0,
   seekInProgress: false,
   seekIntentUntil: 0,
@@ -47,10 +51,16 @@ const ncSync = {
         clearInterval(this.segmentPollId);
         this.segmentPollId = null;
       }
+      if (this._videoObserver) {
+        this._videoObserver.disconnect();
+        this._videoObserver = null;
+      }
+      this._attachedVideo = null;
       try { ncPlayer.cancelSoftSync?.({ restoreRate: true }); } catch {}
     } else {
       this.setupSegmentWatcher();
       this.tryAttachVideoListeners();
+      this.ensureVideoObserver();
     }
   },
 
@@ -69,7 +79,11 @@ const ncSync = {
       ...extra,
     };
     const now = Date.now();
+    const critical = command === 'sync_play' || command === 'sync_pause';
+    const reliable = critical || command === 'sync_seek' || command === 'sync_skip';
+    // Never debounce play/pause — rapid toggles must both land.
     if (
+      !critical &&
       this.lastOutbound?.command === command &&
       now - this.lastOutbound.at < 300 &&
       Math.abs(this.lastOutbound.seconds - payload.seconds) < 0.5
@@ -79,13 +93,12 @@ const ncSync = {
     this.lastOutbound = { command, seconds: payload.seconds, at: now };
     console.log(`[Netflix Connect] Sync out: ${command} @ ${payload.seconds}s`, extra);
 
-    // Play/pause must be reliable — send over WebSocket AND HTTP so a dropped
-    // WS frame cannot leave the partner playing.
-    const critical = command === 'sync_play' || command === 'sync_pause';
-    const viaWs = ncStream.sendSync(payload);
-    if (viaWs && !critical) return;
+    // One event_id for WS + HTTP so the partner dedupes dual delivery.
+    const envelope = ncStream.wrapSync(payload);
+    const viaWs = ncStream.sendSync(envelope);
+    if (viaWs && !reliable) return;
     try {
-      await ncPost(NC_CONFIG.ENDPOINTS.SYNC, payload);
+      await ncPost(NC_CONFIG.ENDPOINTS.SYNC, envelope);
     } catch {
       // Server offline is expected; ignore.
     }
@@ -150,10 +163,21 @@ const ncSync = {
     }
   },
 
+  ensureVideoObserver() {
+    if (this._videoObserver || !this.sessionEnabled) return;
+    this._videoObserver = new MutationObserver(() => {
+      if (!this.sessionEnabled) return;
+      const v = ncGetVideo();
+      if (v && v !== this._attachedVideo) this.attachVideoListeners();
+    });
+    this._videoObserver.observe(document.documentElement, { childList: true, subtree: true });
+  },
+
   attachVideoListeners() {
     const video = ncGetVideo();
-    if (!video || video.__ncListenersAttached) return;
-    video.__ncListenersAttached = true;
+    if (!video) return;
+    if (this._attachedVideo === video) return;
+    this._attachedVideo = video;
 
     this.lastKnownTime = video.currentTime;
     this.lastPaused = video.paused;
@@ -180,6 +204,8 @@ const ncSync = {
         this.lastPaused = true;
         return;
       }
+      // Partner tab-away was holding us; a real local pause means don't auto-resume.
+      this.resumeAfterPartnerReturn = false;
       ncPlayer.cancelSoftSync();
       this.send('sync_pause', video.currentTime);
       this.lastPaused = true;
@@ -210,8 +236,12 @@ const ncSync = {
     });
 
     video.addEventListener('timeupdate', () => {
+      if (this.isSeekTransition(video) || ncPlayer.wasRemote('seek')) {
+        this.lastKnownTime = video.currentTime;
+        return;
+      }
       const jump = Math.abs(video.currentTime - this.lastKnownTime);
-      if (jump > 2 && !this.seekInProgress && !ncPlayer.wasRemote('seek')) {
+      if (jump > 2) {
         this.send('sync_seek', video.currentTime, { paused: this.seekPlaybackWasPaused });
       }
       this.lastKnownTime = video.currentTime;
@@ -235,6 +265,7 @@ const ncSync = {
   tryAttachVideoListeners(attempts = 0) {
     if (ncGetVideo()) {
       this.attachVideoListeners();
+      this.ensureVideoObserver();
       return;
     }
     if (attempts < 30) setTimeout(() => this.tryAttachVideoListeners(attempts + 1), 500);
@@ -331,7 +362,10 @@ const ncSync = {
       if (!video || video.paused === this.lastPaused) return;
       const command = video.paused ? 'sync_pause' : 'sync_play';
       this.lastPaused = video.paused;
-      if (video.paused) ncPlayer.cancelSoftSync();
+      if (video.paused) {
+        this.resumeAfterPartnerReturn = false;
+        ncPlayer.cancelSoftSync();
+      }
       this.send(command, video.currentTime);
     };
     // Netflix often flips state a few frames after the click.
@@ -379,8 +413,20 @@ const ncSync = {
     }
     const critical = data.command === 'sync_play' || data.command === 'sync_pause'
       || data.command === 'play' || data.command === 'pause';
+    // Soft-dedupe critical commands that arrive twice without a shared event_id
+    // (e.g. legacy dual transport).
+    if (critical) {
+      const bucket = Math.round((Number(data.seconds) || 0) * 2);
+      const key = `${data.source_user || ''}|${data.command}|${bucket}`;
+      const now = Date.now();
+      if (!data.event_id && this._lastCriticalKey === key && now - this._lastCriticalAt < 450) {
+        return false;
+      }
+      this._lastCriticalKey = key;
+      this._lastCriticalAt = now;
+      return true;
+    }
     // Never drop play/pause as "stale" — clock skew was eating them.
-    if (critical) return true;
     const age = ncStream.estimatedEventAgeMs(data);
     return age <= NC_CONFIG.COMMAND_STALE_MS;
   },
@@ -445,14 +491,19 @@ const ncSync = {
           ncTelemetry.push({ action: 'sync_pause_received', instant: true });
         }
         break;
-      case 'sync_seek':
-        if (ncPlayer.remoteSeek(this.compensatedSeconds(data, data.paused === false), {
+      case 'sync_seek': {
+        const secs = this.compensatedSeconds(data, data.paused === false);
+        if (ncPlayer.remoteSeek(secs, {
           force: false,
           moving: data.paused === false,
         })) {
           ncTelemetry.push({ action: 'sync_seek_received' });
         }
+        // Preserve partner play/pause after the scrub (skip already did this).
+        if (data.paused) ncPlayer.remotePause(secs);
+        else ncPlayer.remotePlay(secs);
         break;
+      }
       case 'sync_speed':
         if (ncPlayer.remoteRate(data.playback_rate)) {
           ncNotifications.showNote(`Speed changed to ${data.playback_rate}x`, 2000);
@@ -528,9 +579,14 @@ const ncSync = {
     this.tryAttachVideoListeners();
     this.setupTabVisibility();
     this.setupSegmentWatcher();
+    this.ensureVideoObserver();
 
     window.addEventListener('beforeunload', () => {
       this.isPageUnloading = true;
+    });
+    // bfcache restore must re-enable outbound sync.
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) this.isPageUnloading = false;
     });
 
     ncStream.on('command', (data) => this.handleCommand(data));
@@ -613,7 +669,7 @@ const ncDriftChecker = {
   notify(data) {
     const syncTo = data.sync_to;
     const mins = Math.floor(syncTo / 60);
-    const secs = String(syncTo % 60).padStart(2, '0');
+    const secs = String(Math.floor(syncTo % 60)).padStart(2, '0');
     const soft = Math.abs(data.drift) <= NC_CONFIG.SOFT_SYNC_MAX_S;
 
     ncNotifications.show({
