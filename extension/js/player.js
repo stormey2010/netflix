@@ -25,8 +25,6 @@ const ncPlayer = {
     this._suppressedUntil[kind] = Date.now() + duration;
   },
 
-  // Suppress every action kind so Netflix's internal pause/play around a
-  // remote seek cannot bounce back to the partner.
   _markAll(ms = NC_CONFIG.REMOTE_SUPPRESS_MS) {
     const until = Date.now() + ms;
     for (const k of Object.keys(this._suppressedUntil)) {
@@ -34,8 +32,6 @@ const ncPlayer = {
     }
   },
 
-  // True if an event of this kind was likely caused by a remote action we
-  // just applied (and therefore must not be echoed back to the partner).
   wasRemote(kind) {
     return Date.now() < (this._suppressedUntil[kind] || 0);
   },
@@ -70,9 +66,16 @@ const ncPlayer = {
     this.syncTo(p.seconds, p.opts);
   },
 
-  // Raw seek through the Netflix player API (page context).
   _dispatchSeek(seconds) {
     window.dispatchEvent(new CustomEvent('np-seek', { detail: { ms: Number(seconds) * 1000 } }));
+  },
+
+  _dispatchPlay() {
+    window.dispatchEvent(new CustomEvent('np-play'));
+  },
+
+  _dispatchPause() {
+    window.dispatchEvent(new CustomEvent('np-pause'));
   },
 
   _hardSeek(seconds) {
@@ -80,15 +83,13 @@ const ncPlayer = {
     this._dispatchSeek(seconds);
   },
 
-  // === Soft sync (rate nudging) ===========================================
-
   _soft: {
     active: false,
     timer: null,
     baseRate: 1,
-    anchorPos: 0,     // partner position at the moment the sync arrived
-    anchorAt: 0,      // Date.now() when the sync arrived
-    moving: true,     // whether the partner's position advances over time
+    anchorPos: 0,
+    anchorAt: 0,
+    moving: true,
     startedAt: 0,
   },
 
@@ -106,7 +107,6 @@ const ncPlayer = {
     const v = this.video();
     if (!v) return false;
 
-    // Restore any previous nudge first so we capture the true base rate.
     this.cancelSoftSync({ restoreRate: true });
     const s = this._soft;
     s.active = true;
@@ -130,14 +130,11 @@ const ncPlayer = {
     const s = this._soft;
     const v = this.video();
 
-    // Abort if the video vanished, was paused, or we've been at it too long.
     if (!v || v.paused || Date.now() - s.startedAt > NC_CONFIG.SOFT_SYNC_TIMEOUT_MS) {
       this.cancelSoftSync();
       return;
     }
 
-    // Freeze the moving target while buffering/seeking so the gap does not
-    // inflate into a hard-seek jump.
     if (v.readyState < 2 || v.seeking) {
       if (s.moving) {
         const target = this._softTarget();
@@ -147,7 +144,7 @@ const ncPlayer = {
       return;
     }
 
-    const drift = this._softTarget() - v.currentTime; // positive = we're behind
+    const drift = this._softTarget() - v.currentTime;
 
     if (drift <= NC_CONFIG.SOFT_SYNC_DONE_S) {
       this.cancelSoftSync();
@@ -157,7 +154,6 @@ const ncPlayer = {
       return;
     }
 
-    // If the gap grew past the soft window (user seek), hard seek.
     if (drift > NC_CONFIG.SOFT_SYNC_MAX_S) {
       const target = this._softTarget();
       this.cancelSoftSync();
@@ -170,7 +166,6 @@ const ncPlayer = {
       this._mark('rate');
       v.playbackRate = rate;
     } else {
-      // Keep the suppression window open while we hold a non-base rate.
       this._mark('rate');
     }
   },
@@ -191,15 +186,6 @@ const ncPlayer = {
     s.active = false;
   },
 
-  // === Sync entry point ====================================================
-
-  /**
-   * Align our playback with a partner position.
-   * - tiny drift: do nothing
-   * - small drift while playing: soft sync (rate nudge)
-   * - large drift, paused, or force: hard seek
-   * Returns 'soft', 'seek', 'queued', or false if no correction was needed/possible.
-   */
   syncTo(seconds, { force = false, moving = true } = {}) {
     const v = this.video();
     if (!v || !Number.isFinite(seconds)) return false;
@@ -214,7 +200,7 @@ const ncPlayer = {
       return 'seek';
     }
 
-    const drift = seconds - v.currentTime; // positive means this client is behind
+    const drift = seconds - v.currentTime;
     if (Math.abs(drift) <= NC_CONFIG.SOFT_SYNC_MIN_S) return false;
 
     if (drift > 0 && drift < NC_CONFIG.SOFT_SYNC_MAX_S && !v.paused && moving) {
@@ -226,7 +212,31 @@ const ncPlayer = {
     return 'seek';
   },
 
-  // === Remote actions (from partner sync / dashboard commands) ===
+  _forcePause() {
+    this._dispatchPause();
+    const v = this.video();
+    if (v) {
+      try { v.pause(); } catch {}
+    }
+  },
+
+  _forcePlay() {
+    this._dispatchPlay();
+    const v = this.video();
+    if (v) {
+      v.play().catch(() => {});
+    }
+  },
+
+  /** Re-pause after Netflix ignores a user pause (no remote suppress needed). */
+  enforcePause() {
+    this.cancelSoftSync({ restoreRate: true });
+    this._forcePause();
+    const v = this.video();
+    if (!v) return;
+    setTimeout(() => { if (!v.paused) this._forcePause(); }, 50);
+    setTimeout(() => { if (!v.paused) this._forcePause(); }, 200);
+  },
 
   remotePlay(seconds = null) {
     const v = this.video();
@@ -240,17 +250,18 @@ const ncPlayer = {
     }
     this._mark('play');
     const tryPlay = () => {
-      v.play().then(() => {
-        if (seconds !== null && this.isReady()) {
-          this.syncTo(seconds, { force: false, moving: true });
-        }
-      }).catch(() => {});
+      this._forcePlay();
+      if (seconds !== null && this.isReady()) {
+        this.syncTo(seconds, { force: false, moving: true });
+      }
     };
     tryPlay();
-    // Netflix sometimes ignores the first play() while the player is settling.
     setTimeout(() => {
       if (v.paused && this.wasRemote('play')) tryPlay();
     }, 120);
+    setTimeout(() => {
+      if (v.paused && this.wasRemote('play')) tryPlay();
+    }, 400);
     return true;
   },
 
@@ -260,26 +271,16 @@ const ncPlayer = {
     this.cancelSoftSync({ restoreRate: true });
     this._markAll(NC_CONFIG.REMOTE_SUPPRESS_MS);
     this._mark('pause');
-    const forcePause = () => {
-      try { v.pause(); } catch {}
+
+    // Seeking after pause makes Netflix resume — skip position nudge while paused.
+    this._forcePause();
+    const rePause = () => {
+      if (v && !v.paused && this.wasRemote('pause')) this._forcePause();
     };
-    forcePause();
-    // Don't require readyState — pause must work even while buffering.
-    // Netflix occasionally resumes after an external pause; nudge twice.
-    setTimeout(() => {
-      if (v && !v.paused && this.wasRemote('pause')) forcePause();
-    }, 50);
-    setTimeout(() => {
-      if (v && !v.paused && this.wasRemote('pause')) forcePause();
-    }, 200);
-    if (seconds !== null && seconds >= 0) {
-      if (this.isReady()) {
-        const drift = Math.abs(v.currentTime - seconds);
-        if (drift > NC_CONFIG.EXACT_SYNC_THRESHOLD_S) this._hardSeek(seconds);
-      } else {
-        this._queuePending(seconds, { force: true, moving: false });
-      }
-    }
+    setTimeout(rePause, 50);
+    setTimeout(rePause, 200);
+    setTimeout(rePause, 500);
+    setTimeout(rePause, 1000);
     return true;
   },
 
@@ -290,22 +291,20 @@ const ncPlayer = {
   remoteRate(rate) {
     const v = this.video();
     if (!v || !rate) return false;
-    // Partner's intentional speed change becomes our new base rate.
     this._soft.baseRate = rate;
-    if (this._soft.active) return true; // soft sync will converge onto it
+    if (this._soft.active) return true;
     if (v.playbackRate === rate) return false;
     this._mark('rate');
     v.playbackRate = rate;
     return true;
   },
 
-  // Local pause that should not be treated as a user action (tab hidden).
   silentPause() {
     const v = this.video();
     if (!v || v.paused) return false;
     this.cancelSoftSync({ restoreRate: true });
     this._mark('pause');
-    v.pause();
+    this._forcePause();
     return true;
   },
 };

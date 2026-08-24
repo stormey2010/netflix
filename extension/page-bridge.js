@@ -8,8 +8,6 @@
       const vp = api?.videoPlayer;
       const ids = vp?.getAllPlayerSessionIds?.();
       if (!ids || !ids.length) return null;
-      // Prefer the newest session (SPA remount / next episode); fall back
-      // through older ids if the newest is already gone.
       for (let i = ids.length - 1; i >= 0; i--) {
         const player = vp.getVideoPlayerBySessionId(ids[i]);
         if (player) return player;
@@ -20,6 +18,10 @@
     }
   }
 
+  function getVideo() {
+    return document.querySelector('video');
+  }
+
   function seekMs(ms) {
     const player = getPlayer();
     if (!player) return;
@@ -28,12 +30,46 @@
     } catch (_) {}
   }
 
+  function playPlayer() {
+    const player = getPlayer();
+    if (player) {
+      try {
+        if (typeof player.play === 'function') {
+          player.play();
+          return;
+        }
+      } catch (_) {}
+    }
+    const v = getVideo();
+    if (v) v.play().catch(() => {});
+  }
+
+  function pausePlayer() {
+    const player = getPlayer();
+    if (player) {
+      try {
+        if (typeof player.pause === 'function') {
+          player.pause();
+          return;
+        }
+      } catch (_) {}
+    }
+    const v = getVideo();
+    if (v) {
+      try { v.pause(); } catch (_) {}
+    }
+  }
+
   window.addEventListener('np-seek', (e) => {
     const ms = Number(e?.detail?.ms);
     if (!Number.isFinite(ms)) return;
     seekMs(ms);
   });
 
-  // Also expose a global for manual console use if needed.
+  window.addEventListener('np-play', () => playPlayer());
+  window.addEventListener('np-pause', () => pausePlayer());
+
   window.netflixSeekMs = seekMs;
+  window.netflixPlay = playPlayer;
+  window.netflixPause = pausePlayer;
 })();

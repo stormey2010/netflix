@@ -30,6 +30,7 @@ const ncSync = {
   seekPlaybackWasPaused: true,
   resumeOnTabReturn: false,
   resumeAfterPartnerReturn: false,
+  _holdPausedUntil: 0,
 
   // Current Netflix UI segment: null | 'intro' | 'recap'
   currentSegment: null,
@@ -64,6 +65,25 @@ const ncSync = {
     }
   },
 
+  holdPause(ms = 1200) {
+    this._holdPausedUntil = Date.now() + ms;
+  },
+
+  clearHoldPause() {
+    this._holdPausedUntil = 0;
+  },
+
+  shouldHoldPause() {
+    return Date.now() < this._holdPausedUntil;
+  },
+
+  notePlayPauseClick() {
+    const video = ncGetVideo();
+    if (!video) return;
+    if (!video.paused) this.holdPause(1500);
+    else this.clearHoldPause();
+  },
+
   // === Outbound ===========================================================
 
   async send(command, seconds, extra = {}) {
@@ -78,6 +98,8 @@ const ncSync = {
       rate: video.playbackRate,
       ...extra,
     };
+    if (command === 'sync_pause') payload.paused = true;
+    if (command === 'sync_play') payload.paused = false;
     const now = Date.now();
     const critical = command === 'sync_play' || command === 'sync_pause';
     const reliable = critical || command === 'sync_seek' || command === 'sync_skip';
@@ -190,8 +212,14 @@ const ncSync = {
         this.lastPaused = false;
         return;
       }
-      // Always broadcast — do not drop during seek transitions (Netflix often
-      // pauses/plays around seeks and we were swallowing the real user action).
+      // Netflix often auto-resumes right after a user pause — don't relay that.
+      if (this.shouldHoldPause()) {
+        ncPlayer.enforcePause();
+        this.lastPaused = true;
+        return;
+      }
+      this.clearHoldPause();
+      this.seekPlaybackWasPaused = false;
       this.holdingForPartnerSegment = false;
       this.send('sync_play', video.currentTime);
       this.lastPaused = false;
@@ -204,8 +232,9 @@ const ncSync = {
         this.lastPaused = true;
         return;
       }
-      // Partner tab-away was holding us; a real local pause means don't auto-resume.
       this.resumeAfterPartnerReturn = false;
+      this.seekPlaybackWasPaused = true;
+      this.holdPause(1500);
       ncPlayer.cancelSoftSync();
       this.send('sync_pause', video.currentTime);
       this.lastPaused = true;
@@ -227,7 +256,9 @@ const ncSync = {
       const jump = Math.abs(video.currentTime - this.lastKnownTime);
       if (jump > this.SEEK_DETECT_THRESHOLD_S) {
         ncPlayer.cancelSoftSync();
-        this.send('sync_seek', video.currentTime, { paused: this.seekPlaybackWasPaused });
+        this.send('sync_seek', video.currentTime, {
+          paused: this.lastPaused || video.paused,
+        });
       }
       this.lastKnownTime = video.currentTime;
       setTimeout(() => {
@@ -242,7 +273,7 @@ const ncSync = {
       }
       const jump = Math.abs(video.currentTime - this.lastKnownTime);
       if (jump > 2) {
-        this.send('sync_seek', video.currentTime, { paused: this.seekPlaybackWasPaused });
+        this.send('sync_seek', video.currentTime, { paused: video.paused });
       }
       this.lastKnownTime = video.currentTime;
     });
@@ -315,7 +346,10 @@ const ncSync = {
       for (const [selector, action] of simpleClicks) {
         if (e.target.closest(selector)) {
           ncDebouncedPush.fast(action);
-          if (action === 'click_playpause') this.verifyPlayPauseAfterControl();
+          if (action === 'click_playpause') {
+            this.notePlayPauseClick();
+            this.verifyPlayPauseAfterControl();
+          }
           return;
         }
       }
@@ -346,6 +380,7 @@ const ncSync = {
       if (action) {
         ncDebouncedPush.fast(action);
         if (action === 'key_space' || action === 'key_enter') {
+          this.notePlayPauseClick();
           this.verifyPlayPauseAfterControl();
         }
       }
@@ -364,7 +399,12 @@ const ncSync = {
       this.lastPaused = video.paused;
       if (video.paused) {
         this.resumeAfterPartnerReturn = false;
+        this.seekPlaybackWasPaused = true;
+        this.holdPause(1500);
         ncPlayer.cancelSoftSync();
+      } else {
+        this.clearHoldPause();
+        this.seekPlaybackWasPaused = false;
       }
       this.send(command, video.currentTime);
     };
@@ -492,16 +532,13 @@ const ncSync = {
         }
         break;
       case 'sync_seek': {
-        const secs = this.compensatedSeconds(data, data.paused === false);
-        if (ncPlayer.remoteSeek(secs, {
-          force: false,
-          moving: data.paused === false,
-        })) {
-          ncTelemetry.push({ action: 'sync_seek_received' });
-        }
-        // Preserve partner play/pause after the scrub (skip already did this).
-        if (data.paused) ncPlayer.remotePause(secs);
-        else ncPlayer.remotePlay(secs);
+        const partnerPaused = data.paused === true;
+        const partnerPlaying = data.paused === false;
+        const secs = this.compensatedSeconds(data, partnerPlaying);
+        ncPlayer.remoteSeek(secs, { force: false, moving: partnerPlaying });
+        ncTelemetry.push({ action: 'sync_seek_received' });
+        if (partnerPaused) ncPlayer.remotePause(secs);
+        else if (partnerPlaying) ncPlayer.remotePlay(secs);
         break;
       }
       case 'sync_speed':
@@ -518,8 +555,8 @@ const ncSync = {
           ncNotifications.showNote(`${label} (synced)`, 2000);
           ncTelemetry.push({ action: `sync_skip_${data.skip_type}_received` });
         }
-        if (data.paused) ncPlayer.remotePause(data.seconds);
-        else ncPlayer.remotePlay(data.seconds);
+        if (data.paused === true) ncPlayer.remotePause(data.seconds);
+        else if (data.paused === false) ncPlayer.remotePlay(data.seconds);
         break;
 
       // Match the segment position without creating a one-sided pause.
