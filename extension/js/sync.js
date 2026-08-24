@@ -86,10 +86,39 @@ const ncSync = {
 
   // === Outbound ===========================================================
 
+  /** Same path the dashboard uses: POST /command play|pause to the partner. */
+  sendPlayPause(paused) {
+    if (!this.sessionEnabled) return;
+    const video = ncGetVideo();
+    if (!ncUser.current || this.isPageUnloading || !video) return;
+    const command = paused ? 'pause' : 'play';
+    const now = Date.now();
+    if (this._lastPlayPause === command && now - this._lastPlayPauseAt < 250) return;
+    this._lastPlayPause = command;
+    this._lastPlayPauseAt = now;
+    this.lastPaused = paused;
+    const seconds = Math.round(video.currentTime * 1000) / 1000;
+    console.log(`[Netflix Connect] ${command} -> ${ncUser.partner || 'partner'} @ ${seconds}s`);
+    ncPost(NC_CONFIG.ENDPOINTS.COMMAND, {
+      command,
+      source_user: ncUser.current,
+      target_user: ncUser.partner || undefined,
+      seconds,
+    }).catch(() => {});
+  },
+
   async send(command, seconds, extra = {}) {
     if (!this.sessionEnabled) return;
     const video = ncGetVideo();
     if (!ncUser.current || this.isPageUnloading || !video) return;
+    if (command === 'sync_play' || command === 'play') {
+      this.sendPlayPause(false);
+      return;
+    }
+    if (command === 'sync_pause' || command === 'pause') {
+      this.sendPlayPause(true);
+      return;
+    }
     const payload = {
       command,
       seconds: Math.round(Number(seconds) * 1000) / 1000,
@@ -98,14 +127,8 @@ const ncSync = {
       rate: video.playbackRate,
       ...extra,
     };
-    if (command === 'sync_pause') payload.paused = true;
-    if (command === 'sync_play') payload.paused = false;
     const now = Date.now();
-    const critical = command === 'sync_play' || command === 'sync_pause';
-    const reliable = critical || command === 'sync_seek' || command === 'sync_skip';
-    // Never debounce play/pause — rapid toggles must both land.
     if (
-      !critical &&
       this.lastOutbound?.command === command &&
       now - this.lastOutbound.at < 300 &&
       Math.abs(this.lastOutbound.seconds - payload.seconds) < 0.5
@@ -115,10 +138,11 @@ const ncSync = {
     this.lastOutbound = { command, seconds: payload.seconds, at: now };
     console.log(`[Netflix Connect] Sync out: ${command} @ ${payload.seconds}s`, extra);
 
-    // One event_id for WS + HTTP so the partner dedupes dual delivery.
-    const envelope = ncStream.wrapSync(payload);
-    const viaWs = ncStream.sendSync(envelope);
-    if (viaWs && !reliable) return;
+    const wrap = ncStream.wrapSync || ncStream.wrapSync;
+    const sendWs = ncStream.sendSync || ncStream.sendSync;
+    const envelope = typeof wrap === 'function' ? wrap.call(ncStream, payload) : payload;
+    const viaWs = typeof sendWs === 'function' ? sendWs.call(ncStream, envelope) : false;
+    if (viaWs && command !== 'sync_seek' && command !== 'sync_skip') return;
     try {
       await ncPost(NC_CONFIG.ENDPOINTS.SYNC, envelope);
     } catch {
@@ -221,8 +245,7 @@ const ncSync = {
       this.clearHoldPause();
       this.seekPlaybackWasPaused = false;
       this.holdingForPartnerSegment = false;
-      this.send('sync_play', video.currentTime);
-      this.lastPaused = false;
+      this.sendPlayPause(false);
     });
 
     video.addEventListener('pause', () => {
@@ -236,8 +259,7 @@ const ncSync = {
       this.seekPlaybackWasPaused = true;
       this.holdPause(1500);
       ncPlayer.cancelSoftSync();
-      this.send('sync_pause', video.currentTime);
-      this.lastPaused = true;
+      this.sendPlayPause(true);
     });
 
     video.addEventListener('seeking', () => {
@@ -395,8 +417,6 @@ const ncSync = {
       if (!this.sessionEnabled) return;
       const video = ncGetVideo();
       if (!video || video.paused === this.lastPaused) return;
-      const command = video.paused ? 'sync_pause' : 'sync_play';
-      this.lastPaused = video.paused;
       if (video.paused) {
         this.resumeAfterPartnerReturn = false;
         this.seekPlaybackWasPaused = true;
@@ -406,7 +426,7 @@ const ncSync = {
         this.clearHoldPause();
         this.seekPlaybackWasPaused = false;
       }
-      this.send(command, video.currentTime);
+      this.sendPlayPause(video.paused);
     };
     // Netflix often flips state a few frames after the click.
     setTimeout(check, 40);

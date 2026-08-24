@@ -113,7 +113,6 @@ const ncStream = {
     this.serverOffsetMs = firstSample ? offset : this.serverOffsetMs * 0.75 + offset * 0.25;
   },
 
-  /** Mint a shared envelope so WS + HTTP use the same event_id for dedupe. */
   wrapSync(payload) {
     this.seq += 1;
     return {
