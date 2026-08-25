@@ -16,6 +16,12 @@ def _sync_partner(payload: NavUpdatePayload, old: dict[str, Any]) -> None:
     partner = partner_of(payload.user)
     partner_nav = state.nav.get(partner, {})
 
+    # After a play-to-nav pull, the follower reports the new page. Do not push
+    # their still-loading playback state back onto the person already watching.
+    if payload.followed:
+        print(f"[NAV] {payload.user} landed after follow — skip reverse sync")
+        return
+
     started_watching = payload.page_type == "watch" and old.get("page_type") != "watch"
     switched_video = (
         payload.page_type == "watch"

@@ -98,12 +98,17 @@ const ncSync = {
     this._lastPlayPauseAt = now;
     this.lastPaused = paused;
     const seconds = Math.round(video.currentTime * 1000) / 1000;
-    console.log(`[Netflix Connect] ${command} -> ${ncUser.partner || 'partner'} @ ${seconds}s`);
+    const watchId = ncGetWatchId();
+    console.log(`[Netflix Connect] ${command} -> ${ncUser.partner || 'partner'} @ ${seconds}s`, watchId || '');
+    // Include page so the server can pull the partner onto this video if needed.
+    if (typeof ncNavigation !== 'undefined') ncNavigation.report({ force: true });
     ncPost(NC_CONFIG.ENDPOINTS.COMMAND, {
       command,
       source_user: ncUser.current,
       target_user: ncUser.partner || undefined,
       seconds,
+      url: window.location.href,
+      watch_id: watchId || undefined,
     }).catch(() => {});
   },
 
@@ -506,11 +511,11 @@ const ncSync = {
 
     switch (data.command) {
       case 'play':
-        ncPlayer.remotePlay();
+        ncPlayer.remotePlay(Number.isFinite(data.seconds) ? data.seconds : null);
         ncTelemetry.push({ action: 'dashboard_play', instant: true });
         break;
       case 'pause':
-        ncPlayer.remotePause();
+        ncPlayer.remotePause(Number.isFinite(data.seconds) ? data.seconds : null);
         ncTelemetry.push({ action: 'dashboard_pause', instant: true });
         break;
       case 'seek':

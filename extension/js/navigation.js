@@ -6,41 +6,56 @@
 
 const ncNavigation = {
   lastReportedUrl: null,
+  lastReportedWatchId: null,
   lastUrl: window.location.href,
   urlCheckCallback: null,
   enabled: false,
   historyPatched: false,
+  /** Set when we are about to follow a partner navigate event. */
+  pendingFollow: false,
 
   setEnabled(on) {
     this.enabled = !!on;
-    if (!on) this.lastReportedUrl = null;
+    if (!on) {
+      this.lastReportedUrl = null;
+      this.lastReportedWatchId = null;
+      this.pendingFollow = false;
+    }
   },
 
-  async report() {
+  async report(opts = {}) {
     if (!this.enabled) return;
     if (!ncUser.current || ncUser.current === 'unknown') return;
 
     const currentUrl = window.location.href;
-    if (currentUrl === this.lastReportedUrl) return;
+    const watchId = ncGetWatchId();
+    const force = !!opts.force;
+    if (!force && currentUrl === this.lastReportedUrl && watchId === this.lastReportedWatchId) {
+      return;
+    }
 
     const video = ncGetVideo();
     if (ncGetPageType() === 'watch' && !video) {
-      setTimeout(() => this.report(), 250);
+      setTimeout(() => this.report(opts), 250);
       return;
     }
     this.lastReportedUrl = currentUrl;
+    this.lastReportedWatchId = watchId;
     const positionS = video && Number.isFinite(video.currentTime)
       ? Math.round(video.currentTime * 1000) / 1000
       : null;
+    const followed = this.pendingFollow;
+    if (followed) this.pendingFollow = false;
 
     try {
       await ncPost(NC_CONFIG.ENDPOINTS.NAV_UPDATE, {
         user: ncUser.current,
         url: currentUrl,
         page_type: ncGetPageType(),
-        watch_id: ncGetWatchId(),
+        watch_id: watchId,
         position_s: positionS,
         paused: video ? video.paused : null,
+        followed: followed || undefined,
       });
     } catch {
       // Server offline; ignore.
@@ -52,12 +67,14 @@ const ncNavigation = {
     if (data?.action !== 'navigate' || !data.url) return;
     console.log(`[Netflix Connect] Nav sync: ${data.reason} -> ${data.url}`);
     ncNotifications.showSyncing(data.reason || 'Following your partner...');
+    this.pendingFollow = true;
     try {
       sessionStorage.setItem('nc_pending_nav_sync', JSON.stringify({
         seconds: data.seconds,
         paused: data.paused,
         createdAt: Date.now(),
       }));
+      sessionStorage.setItem('nc_pending_follow', '1');
     } catch {}
     setTimeout(() => {
       window.location.href = data.url;
@@ -125,6 +142,12 @@ const ncNavigation = {
 
   init() {
     this.enabled = true;
+    try {
+      if (sessionStorage.getItem('nc_pending_follow') === '1') {
+        this.pendingFollow = true;
+        sessionStorage.removeItem('nc_pending_follow');
+      }
+    } catch {}
     this.setupUrlTracking();
     ncStream.on('nav', (data) => this.handleNavEvent(data));
     this.report();

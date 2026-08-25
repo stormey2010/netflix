@@ -29,10 +29,11 @@ class CommandPayload(BaseModel):
     command: str = Field(..., description="play, pause, seek, share, or align")
     seconds: float | None = Field(None, description="Seek target in seconds")
     target_user: str | None = Field(None, description="Target user, or None for all")
-    url: str | None = Field(None, description="URL for share command")
+    url: str | None = Field(None, description="URL for share command or play-to-nav")
     title: str | None = Field(None, description="Title for share command")
     source_user: str | None = Field(None, description="User who initiated the command")
     soft: bool | None = Field(None, description="Prefer soft rate-nudge sync when possible")
+    watch_id: str | None = Field(None, description="Video ID when playing (for cross-page pull)")
 
 
 class SyncPayload(BaseModel):
@@ -76,6 +77,10 @@ class NavUpdatePayload(BaseModel):
     watch_id: str | None = Field(None, description="Video ID if on a watch page")
     position_s: float | None = Field(None, description="Playback position in seconds")
     paused: bool | None = Field(None, description="Playback state to preserve across navigation")
+    followed: bool | None = Field(
+        None,
+        description="True when this update is after being pulled to the partner's page",
+    )
 
 
 class WatchlistAddPayload(BaseModel):
