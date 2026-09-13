@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from auth import require_api_key
 from bus import bus
 from config import settings
-from schemas import SyncPayload
+from schemas import AlignPayload, SyncPayload
 from state import partner_of, state, utcnow
 
 router = APIRouter(tags=["sync"], dependencies=[Depends(require_api_key)])
@@ -28,6 +28,8 @@ def apply_sync_to_playback(
     *,
     paused: bool | None = None,
     rate: float | None = None,
+    service: str | None = None,
+    media_id: str | None = None,
 ) -> None:
     """Keep drift state fresh from sync events (not only slow telemetry)."""
     now = utcnow()
@@ -45,6 +47,11 @@ def apply_sync_to_playback(
             pass
     if rate is not None:
         pb["rate"] = rate
+    if service is not None:
+        pb["service"] = service
+    if media_id is not None:
+        pb["media_id"] = media_id
+        pb["watch_id"] = media_id
     # Prefer nav watch_id so drift works before the next telemetry tick.
     if not pb.get("watch_id"):
         nav = state.nav.get(source_user) or {}
@@ -52,6 +59,10 @@ def apply_sync_to_playback(
             pb["watch_id"] = nav["watch_id"]
             if nav.get("url"):
                 pb["url"] = nav["url"]
+    if not pb.get("service"):
+        nav = state.nav.get(source_user) or {}
+        if nav.get("service"):
+            pb["service"] = nav["service"]
     pb["server_time"] = now
     state.playback[source_user] = pb
 
@@ -66,6 +77,10 @@ def sync_playback(payload: SyncPayload) -> dict[str, Any]:
         "seconds": payload.seconds,
         "source_user": payload.source_user,
     }
+    if payload.service:
+        event["service"] = payload.service
+    if payload.media_id:
+        event["media_id"] = payload.media_id
     if payload.playback_rate is not None:
         event["playback_rate"] = payload.playback_rate
     if payload.skip_type:
@@ -87,6 +102,8 @@ def sync_playback(payload: SyncPayload) -> dict[str, Any]:
         payload.seconds,
         paused=payload.paused,
         rate=payload.rate,
+        service=payload.service,
+        media_id=payload.media_id,
     )
 
     print(f"[SYNC] {payload.source_user} -> {target}: {payload.command} @ {payload.seconds:.1f}s")
@@ -106,9 +123,9 @@ def check_drift(user: str) -> dict[str, Any]:
     theirs = state.playback.get(partner)
     if not mine or not theirs:
         return {"status": "missing_data", "drift": None}
-    if mine.get("watch_id") != theirs.get("watch_id"):
+    if (mine.get("service"), mine.get("media_id")) != (theirs.get("service"), theirs.get("media_id")):
         return {"status": "different_video", "drift": None}
-    if not mine.get("watch_id"):
+    if not mine.get("media_id") and not mine.get("watch_id"):
         return {"status": "not_watching", "drift": None}
 
     now = utcnow()
@@ -143,7 +160,7 @@ def check_drift(user: str) -> dict[str, Any]:
 
 
 @router.post("/sync/align")
-def align_playback() -> dict[str, Any]:
+def align_playback(payload: AlignPayload | None = None) -> dict[str, Any]:
     """Dashboard Sync: bring both users onto the same position.
 
     Uses the person who is further ahead as the source of truth. The person
@@ -159,7 +176,10 @@ def align_playback() -> dict[str, Any]:
     pb = state.playback.get(b)
     if not pa or not pb:
         return {"status": "missing_data"}
-    if pa.get("watch_id") != pb.get("watch_id") or not pa.get("watch_id"):
+    requested_service = payload.service if payload else None
+    if requested_service and (pa.get("service") != requested_service or pb.get("service") != requested_service):
+        return {"status": "different_video"}
+    if (pa.get("service"), pa.get("media_id") or pa.get("watch_id")) != (pb.get("service"), pb.get("media_id") or pb.get("watch_id")) or not (pa.get("media_id") or pa.get("watch_id")):
         return {"status": "different_video"}
 
     now = utcnow()
@@ -184,6 +204,8 @@ def align_playback() -> dict[str, Any]:
             "seconds": seconds,
             "source_user": leader,
             "soft": soft,
+            "service": pa.get("service") or pb.get("service"),
+            "media_id": pa.get("media_id") or pa.get("watch_id"),
             "origin": "dashboard",
         },
         target_user=follower,
@@ -198,6 +220,8 @@ def align_playback() -> dict[str, Any]:
             "seconds": seconds,
             "source_user": "dashboard",
             "soft": True,
+            "service": pa.get("service") or pb.get("service"),
+            "media_id": pa.get("media_id") or pa.get("watch_id"),
             "origin": "dashboard",
         },
         target_user=leader,
@@ -211,6 +235,8 @@ def align_playback() -> dict[str, Any]:
                     "command": "sync_play",
                     "seconds": seconds,
                     "source_user": "dashboard",
+                    "service": pa.get("service") or pb.get("service"),
+                    "media_id": pa.get("media_id") or pa.get("watch_id"),
                     "origin": "dashboard",
                 },
                 target_user=user,
@@ -223,6 +249,8 @@ def align_playback() -> dict[str, Any]:
                     "command": "sync_pause",
                     "seconds": seconds,
                     "source_user": "dashboard",
+                    "service": pa.get("service") or pb.get("service"),
+                    "media_id": pa.get("media_id") or pa.get("watch_id"),
                     "origin": "dashboard",
                 },
                 target_user=user,

@@ -1,0 +1,51 @@
+services:
+  tunnel-credentials-init:
+    image: alpine:3.20
+    container_name: netflix-connect-tunnel-credentials-init
+    restart: "no"
+    volumes:
+      - ./cloudflared/e0196d18-f95b-46f8-9f68-f6fb7b21a8d4.json:/source/credentials.json:ro
+      - netflix-connect-tunnel-credentials:/target
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        install -d -m 755 /target &&
+        cp /source/credentials.json /target/credentials.json &&
+        chmod 0444 /target/credentials.json
+
+  netflix-connect:
+    build: .
+    container_name: netflix-connect
+    restart: unless-stopped
+    depends_on:
+      tunnel-credentials-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      NC_DB_PATH: /data/netflix_connect.db
+      NC_TUNNEL_CONFIG_PATH: /etc/cloudflared/config.yml
+      NC_TUNNEL_ID: e0196d18-f95b-46f8-9f68-f6fb7b21a8d4
+    ports:
+      - "192.168.42.30:8767:8767"
+    volumes:
+      - netflix-connect-data:/data
+      - netflix-connect-tunnel-credentials:/run/secrets:ro
+    networks:
+      - netflix-connect
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  netflix-connect:
+    name: netflix-connect
+
+volumes:
+  netflix-connect-data:
+    name: netflix-connect-data
+  netflix-connect-tunnel-credentials:
+    name: netflix-connect-tunnel-credentials

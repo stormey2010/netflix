@@ -80,6 +80,7 @@
     .avatar.alt { background: linear-gradient(135deg, #6d5df6, #3d2f9e); }
     .user-name { font-size: 16px; font-weight: 700; }
     .user-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .service-badge { display: inline-flex; margin-top: 5px; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .3px; }
     .state-badge {
       margin-left: auto; padding: 5px 11px; border-radius: 999px;
       font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
@@ -175,7 +176,7 @@
   <div class="wrap">
     <div class="topbar">
       <div class="brand">
-        <div class="brand-n">NETFLIX</div>
+        <div class="brand-n">STREAMING</div>
         <div class="brand-sub">Connect</div>
       </div>
       <div class="topbar-spacer"></div>
@@ -250,10 +251,16 @@
 
     function titleFromUrl(url) {
       if (!url) return null;
-      if (url.includes('/watch/')) return 'Watching \u00b7 ' + url.split('/watch/')[1].split('?')[0];
-      if (url.includes('/browse')) return 'Browsing Netflix';
-      if (url.includes('/search')) return 'Searching';
-      return 'On Netflix';
+      try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        const names = { 'netflix.com': 'Netflix', 'youtube.com': 'YouTube', 'youtu.be': 'YouTube', 'primevideo.com': 'Prime Video', 'hulu.com': 'Hulu', 'peacocktv.com': 'Peacock', 'disneyplus.com': 'Disney+' };
+        const service = names[host] || 'Streaming service';
+        if (url.includes('/watch/') || url.includes('/video/') || url.includes('/detail/')) return `Watching \u00b7 ${service}`;
+        if (url.includes('/browse') || url.includes('/home')) return `Browsing ${service}`;
+        if (url.includes('/search')) return `Searching ${service}`;
+        return `On ${service}`;
+      } catch {}
+      return 'On streaming service';
     }
 
     async function api(path, options = {}) {
@@ -265,6 +272,15 @@
     const sendCommand = (command, extra = {}) =>
       api('/command', { method: 'POST', body: JSON.stringify({ command, ...extra }) }).catch(() => {});
 
+    function commonService() {
+      const services = USERS.map((name) => users[name]?.telemetry?.service).filter(Boolean);
+      return services.length === USERS.length && new Set(services).size === 1 ? services[0] : null;
+    }
+
+    function commandService(targetUser = null) {
+      return targetUser ? users[targetUser]?.telemetry?.service : commonService();
+    }
+
     // ── User cards ──────────────────────────────────────
     function buildCards() {
       $('userCards').innerHTML = USERS.map((name, i) => `
@@ -274,6 +290,7 @@
             <div>
               <div class="user-name">${name}</div>
               <div class="user-sub" id="sub-${name}">Offline</div>
+              <div class="service-badge" id="service-${name}" style="display:none"></div>
             </div>
             <div class="state-badge" id="badge-${name}">OFFLINE</div>
           </div>
@@ -303,7 +320,7 @@
 
       document.querySelectorAll('[data-cmd]').forEach((btn) => {
         btn.addEventListener('click', () => {
-          sendCommand(btn.dataset.cmd, { target_user: btn.dataset.user });
+          sendCommand(btn.dataset.cmd, { target_user: btn.dataset.user, service: commandService(btn.dataset.user) || undefined });
           logEvent(`Sent <b>${btn.dataset.cmd}</b> to <b>${btn.dataset.user}</b>`);
         });
       });
@@ -316,6 +333,7 @@
         badge.textContent = 'OFFLINE';
         badge.className = 'state-badge';
         $('sub-' + name).textContent = 'Offline';
+        $('service-' + name).style.display = 'none';
         return;
       }
       const t = u.telemetry;
@@ -323,11 +341,15 @@
       badge.textContent = playing ? 'PLAYING' : 'PAUSED';
       badge.className = 'state-badge ' + (playing ? 'playing' : 'paused');
       $('sub-' + name).textContent = playing ? 'Watching now' : 'Paused';
+      const service = t.service_name || t.service || 'Streaming service';
+      $('service-' + name).textContent = service;
+      $('service-' + name).style.display = 'inline-flex';
 
-      const watchId = t.watch_id || (t.url && t.url.includes('/watch/') ? t.url.split('/watch/')[1].split('?')[0] : null);
-      $('title-' + name).innerHTML = watchId
-        ? `<a href="https://www.netflix.com/watch/${esc(watchId)}" target="_blank" rel="noopener">${esc(titleFromUrl(t.url))}</a>`
-        : esc(titleFromUrl(t.url) || '\u2014');
+      const title = t.title || titleFromUrl(t.url) || '\u2014';
+      const safeUrl = typeof t.url === 'string' && /^https:\/\//i.test(t.url) ? t.url : null;
+      $('title-' + name).innerHTML = safeUrl
+        ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener">${esc(title)}</a>`
+        : esc(title);
 
       // Estimate live position between telemetry pings.
       let pos = t.position_s;
@@ -339,7 +361,7 @@
       $('fill-' + name).style.width = dur > 0 ? Math.min(100, (pos / dur) * 100) + '%' : '0%';
       $('rate-' + name).textContent = (t.rate || 1) + 'x';
       $('drop-' + name).textContent = t.dropped ?? '\u2014';
-      $('seg-' + name).textContent = t.segment || 'main';
+      $('seg-' + name).textContent = t.context?.kind || t.segment || 'main';
       const ago = Math.round((Date.now() - u.lastSeen) / 1000);
       $('seen-' + name).textContent = ago <= 3 ? 'now' : ago + 's ago';
     }
@@ -466,13 +488,23 @@
     }
 
     // ── Controls ────────────────────────────────────────
-    $('playAll').addEventListener('click', () => { sendCommand('play'); logEvent('Sent <b>play</b> to both'); });
-    $('pauseAll').addEventListener('click', () => { sendCommand('pause'); logEvent('Sent <b>pause</b> to both'); });
+    $('playAll').addEventListener('click', () => {
+      const service = commonService();
+      if (!service) return logEvent('Play both skipped — users are on different services');
+      sendCommand('play', { service }); logEvent('Sent <b>play</b> to both');
+    });
+    $('pauseAll').addEventListener('click', () => {
+      const service = commonService();
+      if (!service) return logEvent('Pause both skipped — users are on different services');
+      sendCommand('pause', { service }); logEvent('Sent <b>pause</b> to both');
+    });
     $('syncBoth').addEventListener('click', async () => {
       const btn = $('syncBoth');
       btn.disabled = true;
       try {
-        const res = await api('/sync/align', { method: 'POST', body: '{}' });
+        const service = commonService();
+        if (!service) { logEvent('Sync failed — users are on different services'); return; }
+        const res = await api('/sync/align', { method: 'POST', body: JSON.stringify({ service }) });
         if (res.status === 'ok') {
           const mode = res.soft ? 'soft catch-up' : 'hard seek';
           logEvent(`Synced <b>${esc(res.follower)}</b> to <b>${esc(res.leader)}</b> @ ${fmtTime(res.seconds)} (${mode}, gap ${res.gap}s)`);
@@ -488,7 +520,9 @@
     $('seekAll').addEventListener('click', () => {
       const s = parseSeek($('seekInput').value);
       if (s === null) return;
-      sendCommand('seek', { seconds: s });
+      const service = commonService();
+      if (!service) return logEvent('Seek both skipped — users are on different services');
+      sendCommand('seek', { seconds: s, service });
       logEvent(`Sent <b>seek</b> to ${fmtTime(s)} for both`);
       $('seekInput').value = '';
     });
@@ -507,7 +541,7 @@
         users[name] = {
           telemetry: {
             ...snap,
-            watch_id: snap.url && snap.url.includes('/watch/') ? snap.url.split('/watch/')[1].split('?')[0] : null,
+            watch_id: snap.media_id || (snap.url && snap.url.includes('/watch/') ? snap.url.split('/watch/')[1].split('?')[0] : null),
           },
           lastSeen: snap.received_at ? new Date(snap.received_at).getTime() : 0,
         };

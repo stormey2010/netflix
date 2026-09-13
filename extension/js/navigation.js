@@ -53,6 +53,10 @@ const ncNavigation = {
         url: currentUrl,
         page_type: ncGetPageType(),
         watch_id: watchId,
+        media_id: ncGetMediaId(),
+        service: ncProviderKey(),
+        service_name: ncProviderName(),
+        title: ncProviderTitle(),
         position_s: positionS,
         paused: video ? video.paused : null,
         followed: followed || undefined,
@@ -65,6 +69,7 @@ const ncNavigation = {
   handleNavEvent(data) {
     if (!this.enabled) return;
     if (data?.action !== 'navigate' || !data.url) return;
+    if (data.service && data.service !== ncProviderKey()) return;
     console.log(`[Netflix Connect] Nav sync: ${data.reason} -> ${data.url}`);
     ncNotifications.showSyncing(data.reason || 'Following your partner...');
     this.pendingFollow = true;

@@ -1,4 +1,4 @@
-// Netflix Connect - page-context UI: "Watching Together" banner shown while
+// Streaming Connect - page-context UI: "Watching Together" banner shown while
 // the player chrome is active. Runs in the page context (injected).
 // Only active when content script dispatches nc-session { active: true }.
 
@@ -107,7 +107,17 @@
   function findTargetAndWatch(attempts = 0) {
     if (!sessionActive) return;
     if (target) return;
-    target = document.querySelector('div[data-uia="player"]');
+    const selectors = [
+      'div[data-uia="player"]', '#movie_player', '#dv-web-player',
+      '#content-video-player', '#core-video-shaka', 'disney-web-player',
+    ];
+    target = selectors.map((selector) => document.querySelector(selector)).find((node) => {
+      if (!node) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect?.();
+      return style.display !== 'none' && style.visibility !== 'hidden' &&
+        (!rect || (rect.width > 0 && rect.height > 0));
+    });
     if (target) {
       attachObserver();
       return;

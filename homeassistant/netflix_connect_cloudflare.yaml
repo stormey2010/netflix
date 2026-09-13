@@ -1,0 +1,8 @@
+# The deployed app creates this native Home Assistant Toggle Helper through
+# the HA API. No YAML is required when NC_HOME_ASSISTANT_* is configured on
+# the server:
+#
+# input_boolean.netflix_connect_cloudflare_tunnel
+#
+# Turning it on starts Cloudflare for at most three hours; turning it off
+# stops it immediately. This file is kept as a reminder for the entity ID.

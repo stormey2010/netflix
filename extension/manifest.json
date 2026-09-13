@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Netflix Connect",
-  "version": "0.7.6",
-  "description": "Watch Netflix together with smart soft-sync, intro/recap matching, and playback controls.",
+  "name": "Streaming Connect",
+  "version": "0.8.0",
+  "description": "Watch together across Netflix, YouTube, Prime Video, Hulu, Peacock, and Disney+.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnAHIQKsKCHTKjk6ZpBI+LECUn8lnO1V0NVs21+acNFP6qXv8/fZpEz+IQXXcGEAH4QvC8F6rJbSgGLWm/MyhbRRpF7kpRQkgWNQ2PilNmtRR2Q2MuPeWxXbtpeMg9LjEzENxDeNYlhkieHYeXbNru9VDjPOVMTzFO9AYZjYFzHL8aDjLCQCkasdGN2zC+3uRLnWINKiL8sYOKf2bghPs2oN2vD+41yIK5PnPPMOWV0Tm/tiIEK6/QZ1eL5Rcxhmq+jhqVODGSeu0TANt7ntG0fzc5OpGriuqmi4nLZP/2mW1uk53/QzO+UwVifKYuAMQzDBYr8xoh+kqcny7IEKu0wIDAQAB",
   "icons": {
     "16": "images/icon.png",
@@ -26,6 +26,17 @@
   ],
   "host_permissions": [
     "https://www.netflix.com/*",
+    "https://www.youtube.com/*",
+    "https://youtube.com/*",
+    "https://youtu.be/*",
+    "https://www.primevideo.com/*",
+    "https://primevideo.com/*",
+    "https://www.hulu.com/*",
+    "https://hulu.com/*",
+    "https://www.peacocktv.com/*",
+    "https://peacocktv.com/*",
+    "https://www.disneyplus.com/*",
+    "https://disneyplus.com/*",
     "https://netflix-api.faredrop.xyz/*"
   ],
   "web_accessible_resources": [
@@ -36,7 +47,18 @@
         "setup.html"
       ],
       "matches": [
-        "https://www.netflix.com/*"
+        "https://www.netflix.com/*",
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
+        "https://youtu.be/*",
+        "https://www.primevideo.com/*",
+        "https://primevideo.com/*",
+        "https://www.hulu.com/*",
+        "https://hulu.com/*",
+        "https://www.peacocktv.com/*",
+        "https://peacocktv.com/*",
+        "https://www.disneyplus.com/*",
+        "https://disneyplus.com/*"
       ]
     }
   ],
@@ -46,10 +68,22 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.netflix.com/*"
+        "https://www.netflix.com/*",
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
+        "https://youtu.be/*",
+        "https://www.primevideo.com/*",
+        "https://primevideo.com/*",
+        "https://www.hulu.com/*",
+        "https://hulu.com/*",
+        "https://www.peacocktv.com/*",
+        "https://peacocktv.com/*",
+        "https://www.disneyplus.com/*",
+        "https://disneyplus.com/*"
       ],
       "js": [
         "js/config.js",
+        "js/providers.js",
         "js/utils.js",
         "js/user.js",
         "js/player.js",

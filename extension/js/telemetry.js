@@ -20,6 +20,11 @@ const ncTelemetry = {
       time: new Date().toISOString(),
       id: p.sourceId || 'unknown',
       url: p.sourceUrl || window.location?.href || '',
+      service: p.provider || 'unknown',
+      service_name: p.providerName || 'Unknown service',
+      media_id: p.sourceId || null,
+      title: p.title || null,
+      context: p.context || { kind: 'content', blocking: false },
       rate: p.playbackRate ?? 1,
       // Use the real paused flag — treating buffering as paused made drift
       // think the partner was paused and broke catch-up / pause sync.

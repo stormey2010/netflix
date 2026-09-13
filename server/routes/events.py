@@ -99,6 +99,7 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
                     "command", "seconds", "playback_rate", "skip_type",
                     "segment", "soft", "paused", "rate", "event_id",
                     "stream_id", "seq", "client_sent_ms", "resume",
+                    "service", "media_id",
                 }
                 and value is not None
             }
@@ -113,6 +114,8 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
                 float(seconds),
                 paused=event.get("paused"),
                 rate=event.get("rate"),
+                service=event.get("service"),
+                media_id=event.get("media_id"),
             )
             print(f"[SYNC/WS] {user} -> {partner_of(user)}: {command} @ {float(seconds):.1f}s")
             bus.publish("command", event, target_user=partner_of(user))

@@ -1,16 +1,21 @@
-# Netflix Connect
+# Streaming Connect
 
-Watch Netflix together with real-time sync and playback controls. A Chrome
-extension keeps two people's playback in lockstep while a FastAPI server
-relays sync events between them.
+Watch together across Netflix, YouTube, Prime Video, Hulu, Peacock, and
+Disney+. The Chrome extension keeps each provider's playback independent while
+the FastAPI server relays only matching-provider sync events.
 
 ## Features
 
 - **Playback sync**: play, pause, seek, speed, and skip-intro are mirrored
   between both users in real time
-- **Soft sync**: when someone is less than 10s behind, they catch up smoothly
-  at 1.25x; gaps of 10s or more hard-seek to the current position
-- **Navigation sync**: when one user starts watching, the other is brought along
+- **Provider adapters**: each service has isolated player discovery, identity,
+  controls, duration, and edge-state handling
+- **Independent services**: a failed Prime or Hulu adapter cannot interrupt a
+  Netflix session, and cross-provider commands are ignored safely
+- **Soft sync**: proven providers use gentle catch-up; providers without a
+  reliable physical rate API use precise seeks instead
+- **Navigation sync**: matching-provider playback can bring the other person
+  along; users on different services remain independent
 - **Invites**: connect via an in-page invite with accept/decline
 - **Shared watchlist**: save titles for each other from the Netflix detail modal
 - **Dashboard**: live monitor for both users with playback controls, an
@@ -23,7 +28,8 @@ netflix/
 ├── extension/                 # Chrome Extension (Manifest V3, vanilla JS)
 │   ├── js/
 │   │   ├── config.js          # API endpoints, timings, constants
-│   │   ├── utils.js           # Video/network/ticker helpers
+│   │   ├── providers.js       # Netflix, YouTube, Prime, Hulu, Peacock, Disney+
+│   │   ├── utils.js           # Provider-aware video/network/ticker helpers
 │   │   ├── user.js            # Profile identity (chrome.storage.sync)
 │   │   ├── player.js          # Playback controller: remote actions, echo
 │   │   │                      #   suppression, soft sync (rate nudging)
@@ -64,7 +70,10 @@ netflix/
 │       ├── dashboard.html
 │       └── dashboard_login.html
 │
-├── config.yml                 # Cloudflare tunnel ingress
+├── config.yml                 # Windows/local Cloudflare tunnel ingress (legacy)
+├── Dockerfile                 # Linux production image
+├── docker-compose.yml         # LAN-only origin deployment
+└── homeassistant/             # On-demand tunnel control notes
 └── start-server.bat           # Windows quick start
 ```
 
@@ -83,12 +92,22 @@ netflix/
 5. Playback state has one authority: explicit media events. Telemetry observes
    state but never emits play/pause commands, and transient pause/play events
    produced while seeking are ignored.
-6. Commands carry millisecond positions, monotonic sequence IDs, and timing
+6. Commands carry millisecond positions, provider/media identity, monotonic
+   sequence IDs, and timing
    metadata. Receivers discard stale/out-of-order events and compensate a
-   playing target for measured network transit time. Drift handling:
-   gaps under 10s are resolved by playing the lagging side at 1.25x; gaps of
-   10s or more hard-seek via
-   Netflix's player API through `page-bridge.js`.
+   playing target for measured network transit time. Drift handling uses
+   provider capabilities: Netflix and Peacock can use 1.25x catch-up, while
+   YouTube, Prime Video, Hulu, and Disney+ use seek-based correction until a
+   reliable physical rate path is available.
+
+### Supported providers
+
+The adapter registry targets the tested player surfaces from the playback
+findings: YouTube's `#movie_player`, Prime's scored `dv-web-player` surfaces,
+Hulu's `#content-video-player` and timeline fallback, Peacock's
+`#core-video-shaka`, and Disney+'s `#hivePlayer1`. Hidden ad, intro, buffering,
+still-watching, error, and up-next elements are treated as blocking states so
+normal sync is not forced through non-content playback.
 
 ### Authentication
 
@@ -97,7 +116,9 @@ netflix/
 - The dashboard uses a password login that issues a signed, expiring session
   cookie; the same-origin dashboard fetches are authorized by that cookie.
 - Secrets live in `server/secrets.yml` (or `NC_API_KEY` /
-  `NC_DASHBOARD_PASSWORD` environment variables).
+  `NC_DASHBOARD_PASSWORD` environment variables). The Docker deployment also
+  reads the server-only Cloudflare credential directory and
+  `NC_TUNNEL_CONTROL_TOKEN` from its `.env` file.
 
 ## Running the server
 
@@ -107,9 +128,26 @@ pip install -r requirements.txt
 python -m uvicorn app:app --host 0.0.0.0 --port 8767
 ```
 
-or double-click `start-server.bat` on Windows. The server also starts the
-Cloudflare tunnel automatically if `cloudflared` is installed at
-`C:\cloudflared\cloudflared.exe` (configurable in `server/config.py`).
+or double-click `start-server.bat` on Windows. Cloudflare is not started by
+the API process. In Docker, Home Assistant controls it through
+`POST /control/tunnel`; every enable request expires after three hours and a
+process shutdown also stops it.
+
+### Docker deployment
+
+The compose file binds the origin to `192.168.42.30:8767` only. With the
+tunnel stopped, the service is LAN-only. Put the matching tunnel credential
+JSON in `cloudflared/` with host permissions `0600` and a separate random
+`NC_TUNNEL_CONTROL_TOKEN` in the server's `.env`, then run:
+
+```bash
+docker compose up -d --build
+```
+
+The native Home Assistant Toggle Helper is
+`input_boolean.netflix_connect_cloudflare_tunnel`. The app controls it through
+the HA API when `NC_HOME_ASSISTANT_URL`, `NC_HOME_ASSISTANT_TOKEN`, and
+`NC_HOME_ASSISTANT_ENTITY_ID` are present; the token stays server-side.
 
 Dashboard: <http://localhost:8767/dashboard>
 
@@ -120,4 +158,4 @@ Dashboard: <http://localhost:8767/dashboard>
 3. Click "Load unpacked" and select the `extension` folder
 4. Pick your profile on the setup page that opens
 
-<!-- updater smoke test: 0.7.2 -->
+<!-- release target: 0.8.0; macOS updater protocol remains 4+ -->

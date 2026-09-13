@@ -18,11 +18,13 @@ const ncMessages = {
       switch (msg?.type) {
         case 'np.getState':
           if (!video) {
-            sendResponse({ ok: true, hasVideo: false, paused: true });
+            sendResponse({ ok: true, hasVideo: false, paused: true, provider: ncProviderKey(), providerName: ncProviderName() });
           } else {
             sendResponse({ 
               ok: true, 
               hasVideo: true, 
+              provider: ncProviderKey(),
+              providerName: ncProviderName(),
               paused: !!video.paused, 
               player: ncDescribeVideo(video) 
             });

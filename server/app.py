@@ -6,7 +6,6 @@ WebSocket-first unified event bus with SSE fallback.
 """
 
 import re
-import subprocess
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -32,6 +31,9 @@ from routes import (
     sync_router,
     telemetry_router,
 )
+from routes.tunnel import router as tunnel_router
+from homeassistant import HomeAssistantBridge
+from tunnel import TunnelManager
 
 # ---------------------------------------------------------------------------
 # CORS
@@ -51,46 +53,29 @@ ALLOWED_ORIGIN_REGEX = (
 )
 
 # ---------------------------------------------------------------------------
-# Lifespan - Cloudflare tunnel management
+# Lifespan - optional Cloudflare tunnel management
 # ---------------------------------------------------------------------------
-
-_cloudflared_proc: subprocess.Popen | None = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _cloudflared_proc
-    bin_path = Path(settings.cloudflared_path)
-    if not (_cloudflared_proc and _cloudflared_proc.poll() is None):
-        try:
-            cmd = [str(bin_path), "tunnel"]
-            if settings.tunnel_config_path.exists():
-                cmd += ["--config", str(settings.tunnel_config_path)]
-            cmd += ["run", settings.tunnel_name]
-            _cloudflared_proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            print(f"[TUNNEL] Started cloudflared tunnel '{settings.tunnel_name}'")
-        except FileNotFoundError:
-            print(f"[TUNNEL] cloudflared not found at {bin_path}; running local-only")
-        except Exception as exc:
-            print(f"[TUNNEL] Failed to start cloudflared: {exc}")
-
+    app.state.tunnel_manager = TunnelManager(
+        token=settings.tunnel_token,
+        config_path=settings.tunnel_config_path,
+        tunnel_id=settings.tunnel_id,
+        max_hours=settings.tunnel_max_hours,
+    )
+    app.state.home_assistant_bridge = HomeAssistantBridge(
+        manager=app.state.tunnel_manager,
+        base_url=settings.home_assistant_url,
+        token=settings.home_assistant_token,
+        entity_id=settings.home_assistant_entity_id,
+    )
+    await app.state.home_assistant_bridge.start()
     try:
         yield
     finally:
-        if _cloudflared_proc and _cloudflared_proc.poll() is None:
-            try:
-                _cloudflared_proc.terminate()
-                _cloudflared_proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                _cloudflared_proc.kill()
-            except Exception:
-                pass
-        _cloudflared_proc = None
+        await app.state.home_assistant_bridge.stop()
+        await app.state.tunnel_manager.shutdown()
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +120,7 @@ for router in (
     library_router,
     events_router,
     dashboard_router,
+    tunnel_router,
 ):
     app.include_router(router)
 

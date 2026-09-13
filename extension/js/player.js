@@ -67,15 +67,25 @@ const ncPlayer = {
   },
 
   _dispatchSeek(seconds) {
-    window.dispatchEvent(new CustomEvent('np-seek', { detail: { ms: Number(seconds) * 1000 } }));
+    try {
+      const adapter = ncProviderAdapter();
+      const result = adapter.seek?.(this.video(), Number(seconds));
+      if (result === false) throw new Error('provider seek unavailable');
+    } catch (e) {
+      console.warn('[Streaming Connect] Seek failed:', e);
+    }
   },
 
   _dispatchPlay() {
-    window.dispatchEvent(new CustomEvent('np-play'));
+    try { ncProviderAdapter().play?.(this.video()); } catch (e) {
+      console.warn('[Streaming Connect] Play failed:', e);
+    }
   },
 
   _dispatchPause() {
-    window.dispatchEvent(new CustomEvent('np-pause'));
+    try { ncProviderAdapter().pause?.(this.video()); } catch (e) {
+      console.warn('[Streaming Connect] Pause failed:', e);
+    }
   },
 
   _hardSeek(seconds) {
@@ -164,7 +174,7 @@ const ncPlayer = {
     const rate = NC_CONFIG.SOFT_SYNC_CATCHUP_RATE;
     if (v.playbackRate !== rate) {
       this._mark('rate');
-      v.playbackRate = rate;
+      ncSetPlaybackRate(v, rate);
     } else {
       this._mark('rate');
     }
@@ -180,7 +190,7 @@ const ncPlayer = {
       const v = this.video();
       if (v && v.playbackRate !== s.baseRate) {
         this._mark('rate');
-        v.playbackRate = s.baseRate;
+        ncSetPlaybackRate(v, s.baseRate);
       }
     }
     s.active = false;
@@ -203,7 +213,7 @@ const ncPlayer = {
     const drift = seconds - v.currentTime;
     if (Math.abs(drift) <= NC_CONFIG.SOFT_SYNC_MIN_S) return false;
 
-    if (drift > 0 && drift < NC_CONFIG.SOFT_SYNC_MAX_S && !v.paused && moving) {
+    if (drift > 0 && drift < NC_CONFIG.SOFT_SYNC_MAX_S && !v.paused && moving && ncProviderSupportsSoftSync()) {
       return this._startSoftSync(seconds, { moving }) ? 'soft' : false;
     }
 
@@ -295,7 +305,7 @@ const ncPlayer = {
     if (this._soft.active) return true;
     if (v.playbackRate === rate) return false;
     this._mark('rate');
-    v.playbackRate = rate;
+    ncSetPlaybackRate(v, rate);
     return true;
   },
 

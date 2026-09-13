@@ -1,0 +1,7 @@
+tunnel: e0196d18-f95b-46f8-9f68-f6fb7b21a8d4
+credentials-file: /run/secrets/credentials.json
+
+ingress:
+  - hostname: netflix-api.faredrop.xyz
+    service: http://127.0.0.1:8767
+  - service: http_status:404

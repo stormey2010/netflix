@@ -6,7 +6,7 @@
 // === Video helpers ===
 
 function ncGetVideo() {
-  return document.querySelector('video');
+  try { return ncProviderAdapter().findVideo?.() || null; } catch { return null; }
 }
 
 function ncIsPlaying(video) {
@@ -48,7 +48,7 @@ function ncDescribeVideo(video) {
 
   return {
     currentTimeS: Number.isFinite(video.currentTime) ? video.currentTime : null,
-    durationS: Number.isFinite(video.duration) ? video.duration : null,
+    durationS: ncGetDuration(video),
     playbackRate: Number.isFinite(video.playbackRate) ? video.playbackRate : null,
     volume: Number.isFinite(video.volume) ? video.volume : null,
     muted: !!video.muted,
@@ -58,30 +58,34 @@ function ncDescribeVideo(video) {
     networkState: video.networkState,
     frames,
     dropped,
-    sourceId: ncGetWatchId(),
+    sourceId: ncGetMediaId(),
     sourceUrl: cleanPageUrl,
+    provider: ncProviderKey(),
+    providerName: ncProviderName(),
+    title: ncProviderTitle(),
+    context: ncGetPlaybackContext(video),
   };
 }
 
 // === Page helpers ===
 
 function ncGetPageType() {
-  const url = window.location.href;
-  if (url.includes('/watch/')) return 'watch';
-  if (url.includes('/title/')) return 'browse';
-  if (url.includes('/browse')) return 'browse';
-  if (url.includes('/search')) return 'search';
-  return 'other';
+  try { return ncProviderAdapter().pageType?.() || 'other'; } catch { return 'other'; }
 }
 
 function ncGetWatchId() {
-  const url = window.location.href;
-  if (!url.includes('/watch/')) return null;
+  return ncGetMediaId();
+}
+
+function ncGetMediaId() {
+  try { return ncProviderAdapter().mediaId?.() || null; } catch { return null; }
+}
+
+function ncGetDuration(video) {
   try {
-    return url.split('/watch/')[1].split('?')[0].split('/')[0];
-  } catch {
-    return null;
-  }
+    const value = ncProviderAdapter().duration?.(video) ?? video?.duration;
+    return Number.isFinite(value) ? value : null;
+  } catch { return Number.isFinite(video?.duration) ? video.duration : null; }
 }
 
 // === Timing helpers ===

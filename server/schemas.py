@@ -21,6 +21,11 @@ class TelemetryPayload(BaseModel):
     dropped: int = Field(..., description="Dropped frame count")
     action: str | None = Field(None, description="Optional action marker")
     segment: str | None = Field(None, description="intro, recap, or null when in main content")
+    service: str | None = Field(None, description="Provider key")
+    service_name: str | None = Field(None, description="Human-readable provider name")
+    media_id: str | None = Field(None, description="Provider-specific media identity")
+    title: str | None = Field(None, description="Current title when available")
+    context: dict[str, Any] | None = Field(None, description="Playback context")
 
 
 class CommandPayload(BaseModel):
@@ -34,6 +39,8 @@ class CommandPayload(BaseModel):
     source_user: str | None = Field(None, description="User who initiated the command")
     soft: bool | None = Field(None, description="Prefer soft rate-nudge sync when possible")
     watch_id: str | None = Field(None, description="Video ID when playing (for cross-page pull)")
+    service: str | None = Field(None, description="Provider key for isolated delivery")
+    media_id: str | None = Field(None, description="Provider-specific media identity")
 
 
 class SyncPayload(BaseModel):
@@ -56,6 +63,12 @@ class SyncPayload(BaseModel):
     seq: int | None = Field(None, description="Monotonic sequence within the stream")
     client_sent_ms: float | None = Field(None, description="Client wall clock when sent")
     resume: bool | None = Field(None, description="Resume after a temporary away state")
+    service: str | None = Field(None, description="Provider key for isolated delivery")
+    media_id: str | None = Field(None, description="Provider-specific media identity")
+
+
+class AlignPayload(BaseModel):
+    service: str | None = Field(None, description="Provider to align")
 
 
 class InvitePayload(BaseModel):
@@ -81,6 +94,10 @@ class NavUpdatePayload(BaseModel):
         None,
         description="True when this update is after being pulled to the partner's page",
     )
+    service: str | None = Field(None, description="Provider key")
+    service_name: str | None = Field(None, description="Human-readable provider name")
+    media_id: str | None = Field(None, description="Provider-specific media identity")
+    title: str | None = Field(None, description="Current title when available")
 
 
 class WatchlistAddPayload(BaseModel):

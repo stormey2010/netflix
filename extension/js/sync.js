@@ -109,6 +109,8 @@ const ncSync = {
       seconds,
       url: window.location.href,
       watch_id: watchId || undefined,
+      service: ncProviderKey() || undefined,
+      media_id: ncGetMediaId() || undefined,
     }).catch(() => {});
   },
 
@@ -130,6 +132,8 @@ const ncSync = {
       source_user: ncUser.current,
       paused: video.paused,
       rate: video.playbackRate,
+      service: ncProviderKey() || undefined,
+      media_id: ncGetMediaId() || undefined,
       ...extra,
     };
     const now = Date.now();
@@ -156,6 +160,8 @@ const ncSync = {
   },
 
   detectSegment() {
+    const provider = ncProviderAdapter();
+    if (provider.segment) return provider.segment();
     if (document.querySelector(this.SKIP_SELECTORS.intro)) return 'intro';
     if (document.querySelector(this.SKIP_SELECTORS.recap)) return 'recap';
     return null;
@@ -461,6 +467,10 @@ const ncSync = {
   // === Inbound ============================================================
 
   acceptCommand(data) {
+    // Provider failures and commands stay isolated. Never apply Netflix's
+    // timestamp to a Disney+, Hulu, Prime, Peacock, or YouTube tab.
+    if (data?.service && data.service !== ncProviderKey()) return false;
+    if (data?.media_id && ncGetMediaId() && data.media_id !== ncGetMediaId()) return false;
     if (data.source_user && ncUser.current && data.source_user === ncUser.current) {
       return false;
     }

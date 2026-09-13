@@ -34,9 +34,19 @@ class Settings:
     port: int = 8767
     cloudflared_path: str = r"C:\cloudflared\cloudflared.exe"
     tunnel_name: str = "netflixapi"
+    tunnel_token: str = ""
+    tunnel_config_path: str = ""
+    tunnel_id: str = ""
+    tunnel_control_token: str = ""
+    tunnel_max_hours: int = 3
+    home_assistant_url: str = ""
+    home_assistant_token: str = ""
+    home_assistant_entity_id: str = "input_boolean.netflix_connect_cloudflare_tunnel"
     # Ingress config (hostname -> localhost mapping) lives at the repo root.
     tunnel_config_path: Path = SERVER_DIR.parent / "config.yml"
-    db_path: Path = SERVER_DIR / "netflix_connect.db"
+    db_path: Path = Path(
+        os.environ.get("NC_DB_PATH", str(SERVER_DIR / "netflix_connect.db"))
+    )
     dashboard_session_hours: int = 8
 
 
@@ -45,6 +55,20 @@ settings = Settings(
     or os.environ.get("NC_API_KEY", "changeme-supersecret-key"),
     dashboard_password=_secrets.get("dashboard_password")
     or os.environ.get("NC_DASHBOARD_PASSWORD", "changeme-dashboard-pass"),
+    tunnel_token=_secrets.get("tunnel_token") or os.environ.get("NC_TUNNEL_TOKEN", ""),
+    tunnel_config_path=os.environ.get("NC_TUNNEL_CONFIG_PATH", ""),
+    tunnel_id=os.environ.get("NC_TUNNEL_ID", ""),
+    tunnel_control_token=(
+        _secrets.get("tunnel_control_token")
+        or os.environ.get("NC_TUNNEL_CONTROL_TOKEN", "")
+    ),
+    tunnel_max_hours=int(os.environ.get("NC_TUNNEL_MAX_HOURS", "3")),
+    home_assistant_url=os.environ.get("NC_HOME_ASSISTANT_URL", ""),
+    home_assistant_token=os.environ.get("NC_HOME_ASSISTANT_TOKEN", ""),
+    home_assistant_entity_id=os.environ.get(
+        "NC_HOME_ASSISTANT_ENTITY_ID",
+        "input_boolean.netflix_connect_cloudflare_tunnel",
+    ),
 )
 
 ALLOWED_USERS: set[str] = set(settings.users)

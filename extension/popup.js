@@ -151,13 +151,22 @@ async function endSession() {
   }
 }
 
-// === Netflix tab hint ======================================================
+// === Current streaming tab =================================================
 
-async function checkNetflixTab() {
+async function checkCurrentStreamingTab() {
   try {
-    const tabs = await chrome.tabs.query({ url: 'https://www.netflix.com/*' });
-    $('netflixHint').classList.toggle('visible', tabs.length === 0);
-  } catch {}
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab?.id) throw new Error('No active tab');
+    const state = await chrome.tabs.sendMessage(tab.id, { type: 'np.getState' });
+    const supported = !!state?.provider;
+    $('netflixHint').classList.toggle('visible', !supported);
+    $('netflixHint').textContent = supported
+      ? `${state.providerName}${state.hasVideo ? ' player detected in this tab.' : ' tab detected; open a title to sync.'}`
+      : 'Open a supported streaming service in the current tab.';
+  } catch {
+    $('netflixHint').classList.add('visible');
+    $('netflixHint').textContent = 'Open a supported streaming service in the current tab.';
+  }
 }
 
 // === Tabs ==================================================================
@@ -301,7 +310,7 @@ async function init() {
   $('disconnect').addEventListener('click', endSession);
   $('inviteLabel').textContent = `Invite ${otherUser}`;
 
-  checkNetflixTab();
+  checkCurrentStreamingTab();
   await refreshState();
   pollTimer = setInterval(refreshState, 4000);
 }

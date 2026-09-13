@@ -33,6 +33,7 @@ def _pull_partner_to_page(payload: CommandPayload, target: str | None) -> bool:
 
     source_nav = state.nav.get(source, {})
     source_url = payload.url or source_nav.get("url")
+    source_service = payload.service or source_nav.get("service")
     source_watch_id = (
         payload.watch_id
         or source_nav.get("watch_id")
@@ -47,14 +48,19 @@ def _pull_partner_to_page(payload: CommandPayload, target: str | None) -> bool:
         "url": source_url,
         "page_type": "watch",
         "watch_id": source_watch_id,
+        "media_id": payload.media_id or source_watch_id,
+        "service": source_service,
         "paused": False,
         "updated_at": utcnow().isoformat(),
     }
 
     partner_nav = state.nav.get(partner, {})
+    if partner_nav.get("page_type") == "watch" and partner_nav.get("service") and source_service and partner_nav.get("service") != source_service:
+        return False
     already_there = (
         partner_nav.get("page_type") == "watch"
         and partner_nav.get("watch_id") == source_watch_id
+        and partner_nav.get("service") == source_service
     )
     if already_there:
         return False
@@ -67,6 +73,8 @@ def _pull_partner_to_page(payload: CommandPayload, target: str | None) -> bool:
             "reason": f"{source} started playing",
             "seconds": payload.seconds,
             "paused": False,
+            "service": source_service,
+            "media_id": payload.media_id or source_watch_id,
         },
         target_user=partner,
     )

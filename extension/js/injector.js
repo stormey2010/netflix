@@ -6,6 +6,7 @@
 const ncInjector = {
   // Inject the seek hook script
   injectSeekHook() {
+    if (ncProviderKey() !== 'netflix') return;
     if (!chrome.runtime?.id) return;
     const already = document.querySelector('script[data-np-bridge="seek"]');
     if (already) return;

@@ -1,0 +1,7 @@
+.git
+.env
+server/secrets.yml
+server/*.db
+extension.zip
+__pycache__
+*.pyc
