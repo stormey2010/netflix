@@ -21,7 +21,9 @@ async def dashboard(request: Request):
     if has_dashboard_session(request):
         return HTMLResponse((TEMPLATE_DIR / "dashboard.html").read_text(encoding="utf-8"))
     return templates.TemplateResponse(
-        "dashboard_login.html", {"request": request, "error": None}
+        request=request,
+        name="dashboard_login.html",
+        context={"error": None},
     )
 
 
@@ -35,7 +37,9 @@ async def dashboard_login(request: Request, password: str = Form(...)):
         )
         return response
     return templates.TemplateResponse(
-        "dashboard_login.html", {"request": request, "error": "Incorrect password"}
+        request=request,
+        name="dashboard_login.html",
+        context={"error": "Incorrect password"},
     )
 
 
