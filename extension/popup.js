@@ -8,6 +8,7 @@ let otherUser = null;
 let pollTimer = null;
 let activeTab = 'connect';
 let refreshErrorCount = 0;
+let refreshInFlight = false;
 const MAX_REFRESH_ERRORS = 3;
 
 const $ = (id) => document.getElementById(id);
@@ -46,6 +47,14 @@ function setHero(stateClass, main, detail = '') {
   $('hero').className = 'hero' + (stateClass ? ' ' + stateClass : '');
   $('connStatus').textContent = main;
   $('stateDetail').textContent = detail;
+}
+
+function setRetryButton(visible, loading = false) {
+  const btn = $('serverRetry');
+  if (!btn) return;
+  btn.hidden = !visible;
+  btn.disabled = loading;
+  btn.classList.toggle('loading', loading);
 }
 
 function openSetup() {
@@ -92,19 +101,35 @@ function renderInviteState(data) {
   }
 }
 
-async function refreshState() {
-  if (activeTab !== 'connect') return;
+async function refreshState({ manual = false } = {}) {
+  if (activeTab !== 'connect' || refreshInFlight) return;
+  refreshInFlight = true;
+  if (manual) setRetryButton(true, true);
   try {
     const data = await apiGet(NC_CONFIG.ENDPOINTS.INVITE_STATUS);
     renderInviteState(data);
     refreshErrorCount = 0;
+    setRetryButton(false);
   } catch (e) {
-    setHero('', 'Server unreachable', 'Check that the server is running');
+    setHero('server-error', 'Server unreachable', 'Check that the server is running');
+    setRetryButton(true);
     refreshErrorCount += 1;
     if (refreshErrorCount >= MAX_REFRESH_ERRORS && pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
     }
+  } finally {
+    refreshInFlight = false;
+    if (manual && !$('serverRetry').hidden) setRetryButton(true);
+  }
+}
+
+async function retryServer() {
+  if (refreshInFlight) return;
+  setHero('server-error', 'Trying again…', 'Checking the server');
+  await refreshState({ manual: true });
+  if ($('serverRetry').hidden && !pollTimer) {
+    pollTimer = setInterval(refreshState, 4000);
   }
 }
 
@@ -304,6 +329,7 @@ async function init() {
 
   setupTabs();
   $('settingsBtn').addEventListener('click', openSetup);
+  $('serverRetry').addEventListener('click', retryServer);
   $('invite').addEventListener('click', sendInvite);
   $('accept').addEventListener('click', acceptInvite);
   $('decline').addEventListener('click', declineInvite);
