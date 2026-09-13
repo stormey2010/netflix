@@ -88,6 +88,7 @@
     }
     .state-badge.playing { background: rgba(45, 213, 115, 0.12); color: var(--green); }
     .state-badge.paused { background: rgba(245, 179, 66, 0.12); color: var(--amber); }
+    .state-badge.online { background: rgba(45, 213, 115, 0.12); color: var(--green); }
 
     .now-playing { margin-top: 16px; }
     .np-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -180,7 +181,7 @@
         <div class="brand-sub">Connect</div>
       </div>
       <div class="topbar-spacer"></div>
-      <div class="conn-pill" id="connPill"><span class="dot"></span><span id="connText">Not connected</span></div>
+      <div class="conn-pill" id="connPill"><span class="dot"></span><span id="connText">No session</span></div>
       <a class="logout" href="/dashboard/logout">Log out</a>
     </div>
 
@@ -228,6 +229,7 @@
     const USERS = ['Parker', 'Emily'];
     const OFFLINE_AFTER_MS = 12000;
     const users = {}; // name -> { telemetry, lastSeen }
+    const presence = {}; // name -> { online, lastSeen }
 
     // ── Helpers ─────────────────────────────────────────
     const $ = (id) => document.getElementById(id);
@@ -329,11 +331,27 @@
     function renderUser(name) {
       const u = users[name];
       const badge = $('badge-' + name);
-      if (!u || !u.telemetry || Date.now() - u.lastSeen > OFFLINE_AFTER_MS) {
+      const p = presence[name];
+      if (!p || !p.online) {
         badge.textContent = 'OFFLINE';
         badge.className = 'state-badge';
         $('sub-' + name).textContent = 'Offline';
         $('service-' + name).style.display = 'none';
+        return;
+      }
+      if (!u || !u.telemetry || Date.now() - u.lastSeen > OFFLINE_AFTER_MS) {
+        badge.textContent = 'ONLINE';
+        badge.className = 'state-badge online';
+        $('sub-' + name).textContent = 'Online';
+        $('service-' + name).style.display = 'none';
+        $('title-' + name).textContent = '—';
+        $('cur-' + name).textContent = '--:--';
+        $('dur-' + name).textContent = '--:--';
+        $('fill-' + name).style.width = '0%';
+        $('rate-' + name).textContent = '—';
+        $('drop-' + name).textContent = '—';
+        $('seg-' + name).textContent = '—';
+        $('seen-' + name).textContent = 'now';
         return;
       }
       const t = u.telemetry;
@@ -376,7 +394,7 @@
         $('connText').textContent = connection.users.join(' + ') + ' connected';
       } else {
         pill.classList.remove('on');
-        $('connText').textContent = 'Not connected';
+        $('connText').textContent = 'No session';
       }
     }
 
@@ -455,12 +473,22 @@
 
     // ── SSE ─────────────────────────────────────────────
     function startStream() {
-      const es = new EventSource('/events/stream?channels=telemetry,command,nav,invite');
+      const es = new EventSource('/events/stream?channels=telemetry,command,nav,invite,presence');
       es.onmessage = (ev) => {
         let e; try { e = JSON.parse(ev.data); } catch { return; }
         switch (e.channel) {
           case 'init':
             setConnection(e.connection);
+            Object.entries(e.presence || {}).forEach(([name, data]) => {
+              presence[name] = { online: data.online !== false, lastSeen: data.last_seen };
+              renderUser(name);
+            });
+            break;
+          case 'presence':
+            if (!USERS.includes(e.user)) break;
+            if (e.online === false) delete presence[e.user];
+            else presence[e.user] = { online: true, lastSeen: e.last_seen };
+            renderUser(e.user);
             break;
           case 'telemetry':
             users[e.user] = { telemetry: e, lastSeen: Date.now() };

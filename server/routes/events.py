@@ -13,7 +13,7 @@ themselves with ?user=Parker so targeted events are filtered server-side.
 import asyncio
 import time
 
-from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
 from auth import require_api_key
@@ -32,16 +32,29 @@ SSE_HEADERS = {
 
 @router.get("/events/stream")
 async def event_stream(request: Request, user: str = "", channels: str = ""):
+    if user:
+        try:
+            validate_user(user)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid user") from exc
     channel_set = {c.strip() for c in channels.split(",") if c.strip()} or None
     sub = bus.subscribe(channels=channel_set, user=user or None)
+    if user:
+        presence = state.mark_presence_online(user)
+        bus.publish("presence", {"user": user, **presence})
+
+    def presence_closed() -> None:
+        if user and state.mark_presence_offline(user):
+            bus.publish("presence", {"user": user, "online": False})
 
     initial = {
         "channel": "init",
         "invite": state.invite,
         "connection": state.connection,
+        "presence": state.presence,
     }
     return StreamingResponse(
-        sse_generator(request, sub, initial=initial),
+        sse_generator(request, sub, initial=initial, on_close=presence_closed),
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
@@ -58,12 +71,15 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
     await websocket.accept()
     channel_set = {c.strip() for c in channels.split(",") if c.strip()} or None
     sub = bus.subscribe(channels=channel_set, user=user or None)
+    presence = state.mark_presence_online(user)
+    bus.publish("presence", {"user": user, **presence})
 
     async def send_events() -> None:
         await websocket.send_json({
             "channel": "init",
             "invite": state.invite,
             "connection": state.connection,
+            "presence": state.presence,
             "server_sent_ms": time.time() * 1000,
         })
         while True:
@@ -137,3 +153,5 @@ async def event_socket(websocket: WebSocket, user: str = "", channels: str = "")
         receiver.cancel()
         await asyncio.gather(sender, receiver, return_exceptions=True)
         bus.unsubscribe(sub)
+        if state.mark_presence_offline(user):
+            bus.publish("presence", {"user": user, "online": False})

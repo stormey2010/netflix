@@ -89,7 +89,7 @@ def sse_format(data: dict) -> str:
     return f"data: {json.dumps(data, default=str)}\n\n"
 
 
-async def sse_generator(request, sub: Subscriber, initial: dict | None = None):
+async def sse_generator(request, sub: Subscriber, initial: dict | None = None, on_close=None):
     """Yield SSE frames for a subscriber until the client disconnects."""
     try:
         if initial is not None:
@@ -105,3 +105,8 @@ async def sse_generator(request, sub: Subscriber, initial: dict | None = None):
                 yield sse_format(data)
     finally:
         bus.unsubscribe(sub)
+        if on_close:
+            try:
+                on_close()
+            except Exception:
+                pass

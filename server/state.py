@@ -25,6 +25,9 @@ class SessionState:
         self.playback: dict[str, dict[str, Any]] = {}
         # user -> navigation state (url, page_type, watch_id)
         self.nav: dict[str, dict[str, Any]] = {}
+        # Presence is independent from playback telemetry and pairing.
+        self.presence: dict[str, dict[str, Any]] = {}
+        self._presence_connections: dict[str, int] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -41,6 +44,31 @@ class SessionState:
     def clear_connection(self) -> None:
         self.connection = None
 
+    def mark_presence_online(self, user: str) -> dict[str, Any]:
+        count = self._presence_connections.get(user, 0) + 1
+        self._presence_connections[user] = count
+        entry = {
+            "online": True,
+            "last_seen": utcnow().isoformat(),
+            "connections": count,
+        }
+        self.presence[user] = entry
+        return entry
+
+    def mark_presence_offline(self, user: str) -> bool:
+        count = self._presence_connections.get(user, 0) - 1
+        if count > 0:
+            self._presence_connections[user] = count
+            self.presence[user] = {
+                "online": True,
+                "last_seen": utcnow().isoformat(),
+                "connections": count,
+            }
+            return False
+        self._presence_connections.pop(user, None)
+        self.presence.pop(user, None)
+        return True
+
     def snapshot(self) -> dict[str, Any]:
         """Full state snapshot used by SSE init events and the dashboard."""
         return {
@@ -48,6 +76,7 @@ class SessionState:
             "connection": self.connection,
             "telemetry": self.telemetry,
             "nav": self.nav,
+            "presence": self.presence,
         }
 
 
