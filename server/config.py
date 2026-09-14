@@ -41,7 +41,7 @@ class Settings:
     tunnel_max_hours: int = 3
     home_assistant_url: str = ""
     home_assistant_token: str = ""
-    home_assistant_entity_id: str = "input_boolean.netflix_connect_cloudflare_tunnel"
+    home_assistant_entity_id: str = "switch.netflix_connect_netflix_connect_cloudflare_tunnel"
     # Ingress config (hostname -> localhost mapping) lives at the repo root.
     tunnel_config_path: Path = SERVER_DIR.parent / "config.yml"
     db_path: Path = Path(
@@ -67,7 +67,7 @@ settings = Settings(
     home_assistant_token=os.environ.get("NC_HOME_ASSISTANT_TOKEN", ""),
     home_assistant_entity_id=os.environ.get(
         "NC_HOME_ASSISTANT_ENTITY_ID",
-        "input_boolean.netflix_connect_cloudflare_tunnel",
+        "switch.netflix_connect_netflix_connect_cloudflare_tunnel",
     ),
 )
 

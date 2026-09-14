@@ -144,8 +144,8 @@ JSON in `cloudflared/` with host permissions `0600` and a separate random
 docker compose up -d --build
 ```
 
-The native Home Assistant Toggle Helper is
-`input_boolean.netflix_connect_cloudflare_tunnel`. The app controls it through
+The Home Assistant tunnel switch is
+`switch.netflix_connect_netflix_connect_cloudflare_tunnel`. The app controls it through
 the HA API when `NC_HOME_ASSISTANT_URL`, `NC_HOME_ASSISTANT_TOKEN`, and
 `NC_HOME_ASSISTANT_ENTITY_ID` are present; the token stays server-side.
 
